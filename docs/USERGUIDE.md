@@ -209,7 +209,7 @@ ansible-playbook playbooks/discover.yml \
   -l '!panorama'
 ```
 
-Ansible prints `skipping: no hosts matched` for the Panorama play. That is not a failure. You can omit `PALO_USERNAME` / `PALO_PASSWORD` on that run.
+Ansible prints `skipping: no hosts matched` for the Panorama play. That is not a failure. You can omit `PALO_USERNAME` / `PALO_PASSWORD` on that run. The report play still runs on the control node (`run_once`, local connection) using the devices you limited to.
 
 Leave `palo_device_groups` and `palo_templates` empty in the customer file until you have them. If the Panorama play still runs with those lists empty, the playbook asserts and fails.
 
@@ -273,6 +273,7 @@ Transit links, MLAG keepalives, and loopbacks **outside** the search CIDR are om
 | Empty report | CIDR does not appear on the listed devices, or you pointed `search_job` at the wrong customer file |
 | Search file not found | Filename is `vars/search/<id>-<site>-<customer>.yml` and `-e search_job=` matches the stem |
 | Panorama play fails / no API access yet | Omit `panorama` from `-l`, or use `-l '!panorama'`. `skipping: no hosts matched` is OK |
+| Build discovery report skipped (`no hosts matched`) | That play used to target `localhost`, which is not in a switch `-l`. Current playbooks run the report `run_once` on the limited devices via a local connection. Generate from existing artifacts with `playbooks/report.yml`. |
 | Assert on `palo_device_groups` | The Panorama play ran with empty groups in the customer file; skip `panorama` until you have them |
 | EOS/NX-OS `command timeout triggered` | Full `show ip bgp vrf all` JSON is not collected (too large on PEs). RIB is gathered per VRF; BGP ads come from running-config. Raise `eos_command_timeout` if a single VRF RIB still times out. Re-run failed hosts with `-l`. |
 | Enable password required | Set become on that host/group (default is off) |

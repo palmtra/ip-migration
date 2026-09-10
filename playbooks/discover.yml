@@ -2,21 +2,17 @@
 - name: Collect device usage
   ansible.builtin.import_playbook: collect.yml
 
+# hosts: all + run_once so -l still builds the report. A hosts: localhost
+# play is skipped when the limit is only switches (localhost is not in -l).
 - name: Build discovery report
-  hosts: localhost
+  hosts: all
   gather_facts: false
+  run_once: true
+  connection: local
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    ansible_become: false
   tasks:
-    - name: Resolve customer search file
-      ansible.builtin.include_tasks: tasks/resolve_search.yml
-    - name: Analyze collected artifacts against search CIDRs
-      ansible.builtin.command:
-        argv:
-          - python3
-          - "{{ playbook_dir }}/../python/analyze_hits.py"
-          - --artifacts
-          - "{{ artifact_root }}"
-          - --search
-          - "{{ search_file }}"
-          - --out
-          - "{{ report_root }}"
-      changed_when: true
+    - name: Analyze artifacts
+      ansible.builtin.include_tasks: tasks/analyze.yml
