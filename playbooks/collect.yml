@@ -1,10 +1,12 @@
 ---
-- name: Collect from Cisco and Arista switches
-  hosts: switches
+- name: Collect from Cisco and Arista switches and PEs
+  hosts: switches:aggpe
   gather_facts: false
   vars:
     device_artifact_dir: "{{ artifact_root }}/{{ inventory_hostname }}"
   pre_tasks:
+    - name: Load customer job
+      ansible.builtin.include_tasks: tasks/include_job.yml
     - name: Create per-device artifact directory
       ansible.builtin.file:
         path: "{{ device_artifact_dir }}"
@@ -23,6 +25,8 @@
   vars:
     device_artifact_dir: "{{ artifact_root }}/{{ inventory_hostname }}"
   pre_tasks:
+    - name: Load customer job
+      ansible.builtin.include_tasks: tasks/include_job.yml
     - name: Create per-device artifact directory
       ansible.builtin.file:
         path: "{{ device_artifact_dir }}"

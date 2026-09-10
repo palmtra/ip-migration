@@ -33,6 +33,22 @@
     gathered_filter: "*"
   register: palo_nat_rules
 
+- name: Gather virtual routers
+  paloaltonetworks.panos.panos_virtual_router:
+    provider: "{{ provider }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_virtual_routers
+  ignore_errors: true
+
+- name: Gather static routes
+  paloaltonetworks.panos.panos_static_route:
+    provider: "{{ provider }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_static_routes
+  ignore_errors: true
+
 - name: Gather IKE gateways
   paloaltonetworks.panos.panos_ike_gateway:
     provider: "{{ provider }}"
@@ -80,6 +96,10 @@
       content: "{{ palo_nat_rules.gathered | default(palo_nat_rules, true) }}"
     - file: ike_gateways.json
       content: "{{ palo_ike_gateways.gathered | default(palo_ike_gateways, true) }}"
+    - file: virtual_routers.json
+      content: "{{ palo_virtual_routers.gathered | default(palo_virtual_routers, true) }}"
+    - file: static_routes.json
+      content: "{{ palo_static_routes.gathered | default(palo_static_routes, true) }}"
     - file: ipsec_tunnels.json
       content: "{{ palo_ipsec_tunnels.gathered | default(palo_ipsec_tunnels, true) }}"
     - file: ipsec_proxyids.json

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from ip_discovery.models import Record
+from ip_discovery.routes import parse_palo_routes
 from ip_discovery.tokens import extract_tokens_from_text
 
 
@@ -32,7 +33,11 @@ def _op_text(payload: Any) -> str:
         return ""
     if isinstance(payload, str):
         return payload
+    if isinstance(payload, list):
+        return "\n".join(_op_text(item) for item in payload)
     if isinstance(payload, dict):
+        if isinstance(payload.get("results"), list):
+            return "\n".join(_op_text(item) for item in payload["results"])
         stdout = payload.get("stdout") or payload.get("msg") or payload.get("xml") or ""
         if isinstance(stdout, list):
             return "\n".join(str(item) for item in stdout)
@@ -185,6 +190,47 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
             )
         )
 
+    for item in _gathered(_read_json(device_dir / "virtual_routers.json")):
+        name = str(item.get("name") or "")
+        values = _as_values(item.get("interface") or item.get("interfaces"))
+        # Virtual router membership is names, not IPs; statics are separate.
+        if name:
+            records.append(
+                Record(
+                    device=device,
+                    platform=platform,
+                    category="virtual_router",
+                    name=name,
+                    field="name",
+                    values=(),
+                    refs=tuple(str(part) for part in values),
+                    context={"interfaces": item.get("interface") or item.get("interfaces")},
+                )
+            )
+
+    for item in _gathered(_read_json(device_dir / "static_routes.json")):
+        name = str(item.get("name") or item.get("destination") or "")
+        values = _as_values(
+            item.get("destination"),
+            item.get("nexthop"),
+            item.get("nexthop_ip"),
+            item.get("interface"),
+        )
+        records.append(
+            Record(
+                device=device,
+                platform=platform,
+                category="route",
+                name=name,
+                field="static",
+                values=values,
+                context={
+                    "vr": item.get("vr_name") or item.get("virtual_router"),
+                    "nexthop_type": item.get("nexthop_type"),
+                },
+            )
+        )
+
     running = _op_text(_read_json(device_dir / "running_config.json"))
     gp_idx = running.lower().find("global-protect")
     gp_text = running[gp_idx : gp_idx + 40000] if gp_idx >= 0 else ""
@@ -203,7 +249,6 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
 
     for category, filename, field_name in (
         ("interface", "op_interfaces.json", "interface"),
-        ("route", "op_routes.json", "route"),
         ("arp", "op_arp.json", "arp"),
     ):
         text = _op_text(_read_json(device_dir / filename))
@@ -218,4 +263,57 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
                     values=(token.raw,),
                 )
             )
+
+    for filename in ("op_routes.json", "op_fib.json", "op_route_destination.json"):
+        text = _op_text(_read_json(device_dir / filename))
+        parsed = parse_palo_routes(text)
+        if parsed:
+            for route in parsed:
+                values = route.match_values()
+                if not values:
+                    continue
+                records.append(
+                    Record(
+                        device=device,
+                        platform=platform,
+                        category="route",
+                        name=route.prefix,
+                        field="prefix/nexthop",
+                        values=values,
+                        context={
+                            "protocol": route.protocol,
+                            "next_hop": route.next_hop,
+                            "interface": route.interface,
+                            "vrf": route.vrf,
+                            "flags": route.flags,
+                            "metric": route.metric,
+                            "source": filename,
+                        },
+                    )
+                )
+            continue
+        for token in extract_tokens_from_text(text):
+            records.append(
+                Record(
+                    device=device,
+                    platform=platform,
+                    category="route",
+                    name=token.raw,
+                    field="route",
+                    values=(token.raw,),
+                    context={"source": filename},
+                )
+            )
+    bgp_text = _op_text(_read_json(device_dir / "op_bgp_peers.json"))
+    for token in extract_tokens_from_text(bgp_text):
+        records.append(
+            Record(
+                device=device,
+                platform=platform,
+                category="bgp_neighbor",
+                name=token.raw,
+                field="peer",
+                values=(token.raw,),
+            )
+        )
     return records

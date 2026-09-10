@@ -14,10 +14,27 @@
       - show ipv6 neighbors
       - show ip route
       - show ipv6 route
+      - show ip vrf
+      - show vrf brief
       - show ip access-lists
       - show ipv6 access-lists
       - show running-config
   register: ios_show
+
+- name: Build VRF-scoped IOS commands
+  ansible.builtin.set_fact:
+    ios_vrf_commands: "{{ vrf_route + vrf_arp + vrf_bgp }}"
+  vars:
+    vrf_route: "{{ collect_vrfs | map('regex_replace', '^(.*)$', 'show ip route vrf \\1') | list }}"
+    vrf_arp: "{{ collect_vrfs | map('regex_replace', '^(.*)$', 'show ip arp vrf \\1') | list }}"
+    vrf_bgp: "{{ collect_vrfs | map('regex_replace', '^(.*)$', 'show ip bgp vpnv4 vrf \\1 summary') | list }}"
+
+- name: Run IOS VRF routing commands
+  cisco.ios.ios_command:
+    commands: "{{ ios_vrf_commands }}"
+  register: ios_vrf_show
+  when: collect_vrfs | length > 0
+  ignore_errors: true
 
 - name: Save IOS command output
   ansible.builtin.copy:
@@ -29,6 +46,8 @@
       content: "{{ ansible_facts | to_nice_json }}"
     - file: show_commands.json
       content: "{{ ios_show | to_nice_json }}"
+    - file: show_vrf_commands.json
+      content: "{{ ios_vrf_show | default({}, true) | to_nice_json }}"
   loop_control:
     label: "{{ item.file }}"
   delegate_to: localhost

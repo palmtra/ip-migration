@@ -39,13 +39,14 @@ artifacts were produced.
 
 ## Pipeline
 
-1. Engineer lists device IPs in inventory and CIDRs/hosts in `vars/search.yml`.
+1. Engineer fills `jobs/<customer>.yml` (subnet, VLANs, firewall vsys, PE VRF,
+   known handoff IPs) and management IPs in inventory.
 2. `playbooks/collect.yml` connects to every in-scope device and writes
-   `artifacts/<hostname>/`.
-3. `python/analyze_hits.py` normalizes artifacts, expands object groups, and
-   matches search targets.
-4. Report lands in `reports/` as Markdown (engineer), CSV (spreadsheet), and
-   JSON (later swap automation).
+   `artifacts/<hostname>/`. VRF-aware route/ARP/BGP commands come from the job.
+3. `python/analyze_hits.py --job …` normalizes artifacts, expands object groups,
+   and matches the job subnet **including route next-hops**.
+4. Report lands in `reports/` as Markdown, CSV, JSON, and `job-filled.yml`
+   (the engineer template with `others` populated).
 
 Re-run analysis without touching devices via `playbooks/report.yml`.
 
@@ -60,7 +61,7 @@ secret is optional (`ansible_become`).
 | --- | --- |
 | Interface IPv4/IPv6 | SVIs and routed ports in the old block |
 | ARP / ND | Silent hosts that never appear in config |
-| Routes | Connected, static, and learned prefixes |
+| Routes / VRF / BGP | Connected, static, BGP, CEF; `show ip route vrf <job_vrf>` |
 | ACLs | Host and network ACEs using the old block |
 | Running-config | Fallback evidence for anything parsers miss |
 
@@ -78,7 +79,7 @@ is enough; modules generate a session key. A long-lived API key
 | Source | Module / command | Swap relevance |
 | --- | --- | --- |
 | Interfaces | `show interface all` | L3 IPs, HA, tunnels, loopbacks |
-| Routes | `show routing route` | VR statics and FIB |
+| Routes | `show routing route`, FIB, per-subnet destination, static routes, virtual routers | VR, statics, and next hops in the old block |
 | ARP | `show arp all` | Hosts behind the firewall |
 | Address objects | `panos_address_object` `state=gathered` | Direct IP/CIDR/range/wildcard |
 | Address groups | `panos_address_group` | Nested members used by policy |
@@ -105,11 +106,14 @@ Address groups are expanded recursively. A security/NAT rule that references
 `GRP-WEB` is reported with a resolution path such as
 `GRP-WEB > H-WEB-01`.
 
-FQDN objects are recorded as unresolved; they need DNS or a later pass.
+A collected **route** also hits when its **next hop** is in the search block,
+even if the prefix is `0.0.0.0/0` or some other customer network. That is the
+WAN handoff case (PE `.177`, firewall `.179` on a `/29`).
 
 ## Inventory and credentials
 
-Copy `inventories/sample/` and replace the RFC 5737 placeholders.
+Copy `jobs/_example.yml` to `jobs/<slug>.yml` and set `JOB_FILE`. Copy
+`inventories/sample/` and replace the RFC 5737 management-IP placeholders.
 
 ```bash
 export NETWORK_USERNAME='netops'

@@ -1,0 +1,62 @@
+---
+# Customer IP-migration job. Copy to jobs/<slug>.yml
+# This is the machine-readable form of the engineer markdown template.
+schema_version: 1
+
+customer: Example Customer
+id: "0000"
+site: example-site
+
+# Block being migrated. Hosts and overlapping prefixes are matched.
+subnet: 192.0.2.0/29
+# Extra CIDRs or hosts to search (optional)
+extra_search: []
+
+vlans:
+  - id: 100
+    name: example_outside
+    role: outside
+
+# Known L3 handoff IPs. Discovery still searches the whole subnet.
+interfaces:
+  - firewall:
+      address: 192.0.2.3/29
+      vsys: vsys1
+      desc: example_outside
+      virtual_router: null
+  - aggpe:
+      address: 192.0.2.1/29
+      vrf: v0000001a
+      desc: example_outside
+      vlan: 100
+
+# Device management IPs used to log in. Leave ansible_host empty until known.
+targets:
+  firewalls:
+    - name: fw-example-01
+      ansible_host: null
+      vsys: vsys1
+  aggpe:
+    - name: pe-example-01
+      ansible_host: null
+      network_os: arista.eos.eos
+      vrf: v0000001a
+  switches: []
+
+# Categories to fill. Discovery writes these; null means not yet collected.
+others:
+  - firewall:
+      object: null
+      object_groups: null
+      nat: null
+      gp_portal: null
+      gp_gateway: null
+      ipsec_tunnels: null
+      security_policies: null
+      routes: null
+      arp: null
+  - aggpe:
+      routes: null
+      bgp: null
+      arp: null
+      interfaces: null

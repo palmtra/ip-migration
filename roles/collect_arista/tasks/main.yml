@@ -10,6 +10,7 @@
       mgmt_ip: "{{ ansible_host | default(inventory_hostname) }}"
       platform: arista.eos.eos
       vendor: arista
+      vrfs: "{{ ((vrfs | default([])) + (job_vrfs | default([]))) | unique }}"
   delegate_to: localhost
 
 - name: Gather EOS facts
@@ -23,10 +24,12 @@
     commands:
       - show ip interface brief | json
       - show ipv6 interface brief | json
-      - show ip arp | json
+      - show ip arp vrf all | json
       - show ipv6 neighbor | json
-      - show ip route | json
-      - show ipv6 route | json
+      - show ip route vrf all | json
+      - show ipv6 route vrf all | json
+      - show ip bgp summary vrf all | json
+      - show vrf | json
       - show ip access-lists | json
       - show running-config
   register: eos_show

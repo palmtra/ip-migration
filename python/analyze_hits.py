@@ -15,6 +15,7 @@ except ImportError:  # pragma: no cover
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from ip_discovery.engine import find_hits
+from ip_discovery.job import load_job
 from ip_discovery.load import load_all_records
 from ip_discovery.report import write_reports
 
@@ -35,17 +36,24 @@ def _load_search(path: Path) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifacts", type=Path, required=True)
-    parser.add_argument("--search", type=Path, required=True)
+    parser.add_argument("--search", type=Path)
+    parser.add_argument("--job", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
-    targets = _load_search(args.search)
+    job = load_job(args.job) if args.job else None
+    if job:
+        targets = job.search_targets
+    elif args.search:
+        targets = _load_search(args.search)
+    else:
+        raise SystemExit("Provide --job or --search")
     if not targets:
-        raise SystemExit("No search_targets found")
+        raise SystemExit("No search targets found")
 
     records = load_all_records(args.artifacts)
     hits = find_hits(records, targets)
-    paths = write_reports(hits, targets, args.out)
+    paths = write_reports(hits, targets, args.out, job=job)
     print(f"records={len(records)} hits={len(hits)}")
     for kind, path in paths.items():
         print(f"{kind}: {path}")

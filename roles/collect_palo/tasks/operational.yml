@@ -11,6 +11,28 @@
     cmd: show routing route
   register: palo_routes
 
+- name: Collect forwarding table
+  paloaltonetworks.panos.panos_op:
+    provider: "{{ provider }}"
+    cmd: show routing fib
+  register: palo_fib
+  ignore_errors: true
+
+- name: Collect routes for each job subnet
+  paloaltonetworks.panos.panos_op:
+    provider: "{{ provider }}"
+    cmd: "show routing route destination {{ item }}"
+  register: palo_route_destination
+  loop: "{{ job_subnets | default([]) }}"
+  ignore_errors: true
+
+- name: Collect BGP peers
+  paloaltonetworks.panos.panos_op:
+    provider: "{{ provider }}"
+    cmd: show routing protocol bgp peer
+  register: palo_bgp_peers
+  ignore_errors: true
+
 - name: Collect ARP table
   paloaltonetworks.panos.panos_op:
     provider: "{{ provider }}"
@@ -48,6 +70,12 @@
       content: "{{ palo_interfaces | default({}, true) }}"
     - file: op_routes.json
       content: "{{ palo_routes | default({}, true) }}"
+    - file: op_fib.json
+      content: "{{ palo_fib | default({}, true) }}"
+    - file: op_route_destination.json
+      content: "{{ palo_route_destination | default({}, true) }}"
+    - file: op_bgp_peers.json
+      content: "{{ palo_bgp_peers | default({}, true) }}"
     - file: op_arp.json
       content: "{{ palo_arp | default({}, true) }}"
     - file: op_gp_users.json

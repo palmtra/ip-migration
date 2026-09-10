@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from ip_discovery.models import Record
-from ip_discovery.tokens import extract_tokens_from_text, parse_token
+from ip_discovery.routes import parse_ios_routes
+from ip_discovery.tokens import parse_token
 
 ARP_RE = re.compile(
     r"Internet\s+(\S+)\s+\S+\s+(\S+)\s+\S+\s+(\S+)",
@@ -41,16 +42,33 @@ def _command_outputs(show_commands: dict[str, Any]) -> list[tuple[str, str]]:
     return pairs
 
 
+def _load_show_files(device_dir: Path) -> dict[str, Any]:
+    merged_commands: list[str] = []
+    merged_stdout: list[str] = []
+    for name in ("show_commands.json", "show_vrf_commands.json"):
+        payload = _read_json(device_dir / name) or {}
+        for command, output in _command_outputs(payload):
+            merged_commands.append(command)
+            merged_stdout.append(output)
+    return {
+        "commands": merged_commands,
+        "stdout": merged_stdout,
+        "invocation": {"module_args": {"commands": merged_commands}},
+    }
+
+
 def _output_for(show_commands: dict[str, Any], needle: str) -> str:
-    for command, output in _command_outputs(show_commands):
-        if needle in command.lower():
-            return output
-    return ""
+    chunks = [
+        output
+        for command, output in _command_outputs(show_commands)
+        if needle in command.lower()
+    ]
+    return "\n".join(chunks)
 
 
 def records_from_cisco(device_dir: Path, device: str, platform: str) -> list[Record]:
     records: list[Record] = []
-    show_commands = _read_json(device_dir / "show_commands.json") or {}
+    show_commands = _load_show_files(device_dir)
     facts = _read_json(device_dir / "facts.json") or {}
 
     ipv4 = (facts.get("ansible_net_interfaces") or facts.get("net_interfaces") or {})
@@ -115,20 +133,35 @@ def records_from_cisco(device_dir: Path, device: str, platform: str) -> list[Rec
                 )
             )
 
-    route_text = _output_for(show_commands, "ip route")
-    for token in extract_tokens_from_text(route_text):
-        if token.kind != "net":
+    for command, output in _command_outputs(show_commands):
+        lowered = command.lower()
+        if "ip route" not in lowered:
             continue
-        records.append(
-            Record(
-                device=device,
-                platform=platform,
-                category="route",
-                name=token.raw,
-                field="prefix",
-                values=(token.raw,),
+        vrf = None
+        if "vrf " in lowered:
+            vrf = command.split("vrf", 1)[1].strip().split()[0]
+        for route in parse_ios_routes(output, default_vrf=vrf):
+            values = route.match_values()
+            if not values:
+                continue
+            records.append(
+                Record(
+                    device=device,
+                    platform=platform,
+                    category="route",
+                    name=route.prefix,
+                    field="prefix/nexthop",
+                    values=values,
+                    context={
+                        "protocol": route.protocol,
+                        "next_hop": route.next_hop,
+                        "interface": route.interface,
+                        "vrf": route.vrf,
+                        "flags": route.flags,
+                        "command": command,
+                    },
+                )
             )
-        )
 
     acl_text = _output_for(show_commands, "access-list")
     current_acl = "unnamed"

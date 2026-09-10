@@ -12,6 +12,7 @@
       vendor: paloalto
       vsys: "{{ palo_vsys }}"
       is_panorama: "{{ palo_is_panorama }}"
+      job_subnets: "{{ job_subnets | default([]) }}"
   delegate_to: localhost
 
 - name: Collect PAN-OS configuration objects
