@@ -6,11 +6,9 @@ over the XML API. The analyzer writes an engineer review of every place those
 CIDRs appear: interfaces, ARP, routes (including next hops), BGP
 advertisements, ACLs, and Palo objects / NAT / security / VPN.
 
-No per-customer job file is required. VRF names are discovered from the
-switches. Panorama device groups and templates are taken from inventory;
-each object is marked **shared** or scoped to a device group / template.
-
-See [docs/DESIGN.md](docs/DESIGN.md) for match rules and collectors.
+**Operators:** start with [docs/USERGUIDE.md](docs/USERGUIDE.md) (customer, ID,
+site, CIDR, inventory, Panorama group/template). Match rules are in
+[docs/DESIGN.md](docs/DESIGN.md).
 
 ## Usable now
 

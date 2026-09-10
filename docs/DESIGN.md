@@ -1,5 +1,8 @@
 # IP subnet migration discovery
 
+Operators: [USERGUIDE.md](USERGUIDE.md) is the how-to (customer, ID, site,
+CIDR, inventory, Panorama group and template). This document is the design.
+
 Discovery is **read-only**. Inputs are:
 
 1. An Ansible inventory of devices (management IP, platform, OS).
