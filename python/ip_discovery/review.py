@@ -121,6 +121,8 @@ def _interfaces(hits: list[Hit]) -> list[dict[str, Any]]:
                 "device": hit.device,
                 "desc": (hit.context or {}).get("description") or (hit.context or {}).get("desc"),
                 "vrf": (hit.context or {}).get("vrf"),
+                "virtual": (hit.context or {}).get("virtual"),
+                "role": (hit.context or {}).get("role"),
                 "vsys": (hit.context or {}).get("vsys"),
                 "shared": (hit.context or {}).get("shared"),
                 "location": (hit.context or {}).get("location"),
@@ -180,6 +182,7 @@ def _switch_others(hits: list[Hit]) -> list[dict[str, Any]]:
                 "name": device,
                 "bgp": bgp_blocks or None,
                 "arp": [_compact_hit(hit) for hit in device_hits if hit.category == "arp"] or None,
+                "mlag": [_compact_hit(hit) for hit in device_hits if hit.category == "mlag"] or None,
                 "routes": [_compact_hit(hit) for hit in device_hits if hit.category == "route"] or None,
                 "interfaces": [_compact_hit(hit) for hit in device_hits if hit.category == "interface"] or None,
             }

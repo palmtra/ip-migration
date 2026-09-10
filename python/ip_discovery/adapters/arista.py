@@ -1,12 +1,21 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 from ip_discovery.bgp import parse_running_config_bgp
 from ip_discovery.models import Record
 from ip_discovery.tokens import parse_token
+
+IFACE_HEADER = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+IP_VIRTUAL = re.compile(r"^ip address virtual\s+(\S+)", re.IGNORECASE)
+IP_ADDR = re.compile(r"^ip address\s+(\S+)", re.IGNORECASE)
+IP_VR = re.compile(r"^ip virtual-router address\s+(\S+)", re.IGNORECASE)
+IFACE_VRF = re.compile(r"^vrf\s+(?:forwarding\s+)?(\S+)", re.IGNORECASE)
+IFACE_DESC = re.compile(r"^description\s+(.+)$", re.IGNORECASE)
+VR_MAC = re.compile(r"^ip virtual-router mac-address\s+(\S+)", re.IGNORECASE)
 
 
 def _read_json(path: Path) -> Any:
@@ -43,6 +52,135 @@ def _payloads_for(show_commands: dict[str, Any], needle: str) -> list[Any]:
 def _payload_for(show_commands: dict[str, Any], needle: str) -> Any:
     payloads = _payloads_for(show_commands, needle)
     return payloads[0] if payloads else None
+
+
+def parse_eos_running_interfaces(text: str) -> list[dict[str, Any]]:
+    """Parse SVI/physical IPs and VARP virtual IPs from EOS running-config."""
+    items: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+
+    def close() -> None:
+        nonlocal current
+        if current and (current["addresses"] or current["virtual"]):
+            items.append(current)
+        current = None
+
+    for raw in (text or "").splitlines():
+        if raw.strip().startswith("!"):
+            continue
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        header = IFACE_HEADER.match(stripped)
+        indented = bool(raw[:1].isspace())
+        if header and not indented:
+            close()
+            current = {
+                "name": header.group(1),
+                "addresses": [],
+                "virtual": [],
+                "vrf": None,
+                "description": None,
+            }
+            continue
+        if current is not None and not indented:
+            close()
+        if current is None:
+            continue
+        virtual = IP_VIRTUAL.match(stripped)
+        if virtual:
+            current["virtual"].append(virtual.group(1))
+            continue
+        varp = IP_VR.match(stripped)
+        if varp:
+            current["virtual"].append(varp.group(1))
+            continue
+        addr = IP_ADDR.match(stripped)
+        if addr:
+            current["addresses"].append(addr.group(1))
+            continue
+        vrf = IFACE_VRF.match(stripped)
+        if vrf:
+            current["vrf"] = vrf.group(1)
+            continue
+        desc = IFACE_DESC.match(stripped)
+        if desc:
+            current["description"] = desc.group(1).strip()
+    close()
+    return items
+
+
+def parse_eos_virtual_router_mac(text: str) -> str | None:
+    for raw in (text or "").splitlines():
+        match = VR_MAC.match(raw.strip())
+        if match:
+            return match.group(1)
+    return None
+
+
+def _varp_entries(payload: Any) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    if not isinstance(payload, dict):
+        return entries
+
+    def add(iface: str | None, address: Any, extra: dict[str, Any] | None = None) -> None:
+        if not address or not parse_token(str(address)):
+            return
+        item = {"interface": iface or "varp", "address": str(address)}
+        if extra:
+            item.update({key: value for key, value in extra.items() if value not in (None, "")})
+        entries.append(item)
+
+    routers = payload.get("virtualRouters") or payload.get("ipVirtualRouters") or payload.get("virtualRouter")
+    if isinstance(routers, dict):
+        for name, data in routers.items():
+            if isinstance(data, dict):
+                add(
+                    data.get("interface") or data.get("ifName") or name,
+                    data.get("address") or data.get("ipAddress") or data.get("virtualRouterIp") or data.get("virtualIp"),
+                    {"mac": data.get("macAddress") or data.get("virtualMac")},
+                )
+            elif parse_token(str(data)):
+                add(name, data, None)
+    elif isinstance(routers, list):
+        for data in routers:
+            if not isinstance(data, dict):
+                continue
+            add(
+                data.get("interface") or data.get("ifName") or data.get("name"),
+                data.get("address") or data.get("ipAddress") or data.get("virtualRouterIp") or data.get("virtualIp"),
+                {"mac": data.get("macAddress") or data.get("virtualMac")},
+            )
+
+    virtual_macs = payload.get("virtualMacs")
+    if isinstance(virtual_macs, dict):
+        for mac, data in virtual_macs.items():
+            if not isinstance(data, dict):
+                continue
+            interfaces = data.get("interfaces") or data.get("ipInterfaces") or {}
+            if isinstance(interfaces, dict):
+                for name, iface in interfaces.items():
+                    if isinstance(iface, dict):
+                        add(name, iface.get("ipAddress") or iface.get("address") or iface.get("virtualIp"), {"mac": mac})
+                    elif parse_token(str(iface)):
+                        add(name, iface, {"mac": mac})
+    return entries
+
+
+def _mlag_context(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    config = payload.get("config") if isinstance(payload.get("config"), dict) else payload
+    detail = payload.get("detail") if isinstance(payload.get("detail"), dict) else {}
+    merged = {**config, **detail, **payload}
+    context = {
+        "domain": merged.get("domainId") or merged.get("domain-id") or merged.get("domain"),
+        "peer_address": merged.get("peerAddress") or merged.get("peerIp") or merged.get("peer-address"),
+        "local_interface": merged.get("localInterface") or merged.get("local-interface"),
+        "peer_link": merged.get("peerLink") or merged.get("peer-link"),
+        "state": merged.get("state") or merged.get("mlagState"),
+    }
+    return {key: value for key, value in context.items() if value not in (None, "")}
 
 
 def records_from_arista(device_dir: Path, device: str, platform: str) -> list[Record]:
@@ -184,8 +322,76 @@ def records_from_arista(device_dir: Path, device: str, platform: str) -> list[Re
                             context={"sequence": sequence.get("sequenceNumber")},
                         )
                     )
+    varp_payload = _payload_for(show_commands, "show ip virtual-router")
+    for item in _varp_entries(varp_payload):
+        records.append(
+            Record(
+                device=device,
+                platform=platform,
+                category="interface",
+                name=str(item["interface"]),
+                field="varp",
+                values=(item["address"],),
+                context={"virtual": True, "mac": item.get("mac"), "role": "varp"},
+            )
+        )
+
+    mlag_payload = _payload_for(show_commands, "show mlag")
+    mlag_ctx = _mlag_context(mlag_payload)
+    peer = mlag_ctx.get("peer_address")
+    if peer and parse_token(str(peer)):
+        records.append(
+            Record(
+                device=device,
+                platform=platform,
+                category="mlag",
+                name=str(mlag_ctx.get("domain") or "mlag"),
+                field="peer-address",
+                values=(str(peer),),
+                context=mlag_ctx,
+            )
+        )
+
     running = _payload_for(show_commands, "show running-config")
     running_text = running if isinstance(running, str) else json.dumps(running or "")
+    vr_mac = parse_eos_virtual_router_mac(running_text)
+    for iface in parse_eos_running_interfaces(running_text):
+        physical = [value for value in iface["addresses"] if parse_token(value)]
+        if physical:
+            records.append(
+                Record(
+                    device=device,
+                    platform=platform,
+                    category="interface",
+                    name=iface["name"],
+                    field="address",
+                    values=tuple(physical),
+                    context={
+                        "vrf": iface.get("vrf"),
+                        "description": iface.get("description"),
+                        "source": "running-config",
+                    },
+                )
+            )
+        virtual = [value for value in iface["virtual"] if parse_token(value)]
+        if virtual:
+            records.append(
+                Record(
+                    device=device,
+                    platform=platform,
+                    category="interface",
+                    name=iface["name"],
+                    field="varp",
+                    values=tuple(virtual),
+                    context={
+                        "vrf": iface.get("vrf"),
+                        "description": iface.get("description"),
+                        "virtual": True,
+                        "role": "varp",
+                        "mac": vr_mac,
+                    },
+                )
+            )
     advertisements, neighbors = parse_running_config_bgp(running_text)
     for item in advertisements:
         records.append(

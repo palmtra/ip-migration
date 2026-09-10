@@ -31,6 +31,8 @@
       - show ipv6 route vrf all | json
       - show ip bgp summary vrf all | json
       - show ip bgp vrf all | json
+      - show ip virtual-router | json
+      - show mlag | json
       - show vrf | json
       - show vlan | json
       - show ip access-lists | json
