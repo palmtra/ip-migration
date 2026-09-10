@@ -20,7 +20,7 @@ OS values the inventory understands:
 | Cisco IOS / IOS-XE | `ios_devices` | `group_vars/ios_devices.yml` |
 | Cisco NX-OS | `nxos_devices` | `group_vars/nxos_devices.yml` |
 | Arista EOS | `eos_devices` | `group_vars/eos_devices.yml` |
-| Palo Alto (Panorama) | `panorama` | `group_vars/panorama.yml` — API connection only; do **not** SSH firewalls |
+| Palo Alto (Panorama) | `panorama` | `group_vars/panorama.yml`: API connection only; do **not** SSH firewalls |
 | Arista CloudVision | `CVAAS` | inventory only; discovery does not log into CVP |
 
 Inventory can hold the whole estate. Limit a run with `-l dc_dc1` (or hostnames). Per-customer Panorama scope is selected by `search_job`, not by editing hosts.yml.
@@ -31,8 +31,8 @@ These are required in practice even if they were not on the intake form:
 
 1. **Management IPs** for every switch/PE and for **Panorama** (not the dataplane). The control node must reach SSH `22` on Cisco/Arista and HTTPS `443` on Panorama.
 2. **Two accounts**, not one:
-   - `NETWORK_USERNAME` / `NETWORK_PASSWORD` — SSH to Cisco and Arista (`network_cli`).
-   - `PALO_USERNAME` / `PALO_PASSWORD` (or `PALO_API_KEY`) — Panorama XML API. Use a service account with **no commit** rights.
+   - `NETWORK_USERNAME` / `NETWORK_PASSWORD`: SSH to Cisco and Arista (`network_cli`).
+   - `PALO_USERNAME` / `PALO_PASSWORD` (or `PALO_API_KEY`): Panorama XML API. Use a service account with **no commit** rights.
 3. **Every device group that can hold the objects**, including child groups, in the **customer search file**. A parent group does not pull child-group objects.
 4. **Templates for network/VPN** in that same search file (interfaces, VR, statics, IKE, IPSec). Policy lives in device groups; interfaces/IKE live in templates. If you use **template stacks**, set `palo_template_stacks` as well.
 5. **Python 3 venv + Ansible collections** on the machine that runs the playbook (see setup below).
@@ -90,7 +90,7 @@ Intake:
 - Panorama device group: `DG-DC1-PROD`
 - Panorama template: `TPL-DC1-NETWORK`
 
-### 4.1 Search file — `vars/search/INC-1042-DC1-Example-Retail.yml`
+### 4.1 Search file: `vars/search/INC-1042-DC1-Example-Retail.yml`
 
 One YAML file per customer. Filename is `<id>-<site>-<customer>` with spaces turned into hyphens.
 
@@ -112,7 +112,7 @@ Add more CIDRs under `search_targets` if this ticket covers more than one block.
 
 A host such as `10.200.100.10` or a `/30` is valid. `any` and `0.0.0.0/0` are ignored.
 
-### 4.2 Inventory — `inventories/production/hosts.yml`
+### 4.2 Inventory: `inventories/production/hosts.yml`
 
 Use real management IPs. Hosts.yml is the estate: OS groups, per-site children, and controllers with hostname + IP only. Connection settings stay in `group_vars/`. Do not put device groups or templates on Panorama.
 

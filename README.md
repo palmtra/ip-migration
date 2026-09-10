@@ -44,9 +44,9 @@ ansible-playbook playbooks/discover.yml \
 
 Reports (under `reports/<cidr>/`, with `.` → `-` and `/` → `_`):
 
-- `reports/10-200-100-10_30/migration-review.yml` — engineer template
-- `discovery.md` — readable review including ARP and routing tables
-- `discovery.csv` / `discovery.json` — full hit list for that CIDR
+- `reports/10-200-100-10_30/migration-review.yml`: engineer template
+- `discovery.md`: readable review including ARP and routing tables
+- `discovery.csv` / `discovery.json`: full hit list for that CIDR
 
 Re-run analysis without logging into devices:
 

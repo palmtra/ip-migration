@@ -1,0 +1,26 @@
+---
+description: Use ASCII hyphens only; never em or en dashes
+alwaysApply: true
+---
+
+# ASCII punctuation
+
+Never use an em dash (U+2014) or en dash (U+2013) in any file in this repo:
+comments, YAML, Markdown, Python, rules, or commit messages.
+
+Those characters render as garbled text in terminals that are not UTF-8.
+
+Use ASCII instead:
+
+- hyphen-minus `-`
+- colon `: `
+- comma `, `
+- double hyphen `--` in CLI flags only
+
+```yaml
+# BAD (em dash between the group and the note)
+#   panorama  <em dash> controllers
+
+# GOOD
+#   panorama  : controllers
+```
