@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from ip_discovery.engine import find_hits
 from ip_discovery.load import load_all_records
-from ip_discovery.report import write_reports
+from ip_discovery.report import write_target_reports
 
 
 def _load_search(path: Path) -> tuple[list[str], dict[str, str]]:
@@ -52,10 +52,12 @@ def main() -> int:
 
     records = load_all_records(args.artifacts)
     hits = find_hits(records, targets)
-    paths = write_reports(hits, targets, args.out, labels=labels)
+    by_target = write_target_reports(hits, targets, args.out, labels=labels)
     print(f"records={len(records)} hits={len(hits)}")
-    for kind, path in paths.items():
-        print(f"{kind}: {path}")
+    for target, paths in by_target.items():
+        print(f"{target}:")
+        for kind, path in paths.items():
+            print(f"  {kind}: {path}")
     return 0
 
 

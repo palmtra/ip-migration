@@ -41,11 +41,11 @@ ansible-playbook playbooks/discover.yml \
   -e search_file="$PWD/vars/search.local.yml"
 ```
 
-Reports (under `reports/`):
+Reports (under `reports/<cidr>/`, with `.` → `-` and `/` → `_`):
 
-- `migration-review.yml` — engineer template (interfaces, ARP, BGP ads, objects)
+- `reports/10-200-100-10_30/migration-review.yml` — engineer template
 - `discovery.md` — readable review including ARP and routing tables
-- `discovery.csv` / `discovery.json` — full hit list
+- `discovery.csv` / `discovery.json` — full hit list for that CIDR
 
 Re-run analysis without logging into devices:
 
@@ -63,6 +63,7 @@ python3 python/analyze_hits.py \
   --artifacts python/tests/fixtures/artifacts \
   --search python/tests/fixtures/search.yml \
   --out /tmp/ip-discovery-report
+# writes /tmp/ip-discovery-report/10-50-12-0_24/migration-review.yml
 ```
 
 Collection is read-only: no PAN-OS commit, no `state: present`, no config writes.

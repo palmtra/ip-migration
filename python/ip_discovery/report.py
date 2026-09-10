@@ -10,6 +10,26 @@ from ip_discovery.models import Hit
 from ip_discovery.review import build_review
 
 
+def report_dir_name(target: str) -> str:
+    """Folder name for a search CIDR: 10.200.100.10/30 -> 10-200-100-10_30."""
+    return str(target).strip().replace(".", "-").replace("/", "_")
+
+
+def write_target_reports(
+    hits: list[Hit],
+    search_targets: list[str],
+    report_root: Path,
+    labels: dict[str, str] | None = None,
+) -> dict[str, dict[str, Path]]:
+    """Write one report folder per search CIDR under report_root."""
+    written: dict[str, dict[str, Path]] = {}
+    for target in search_targets:
+        subset = [hit for hit in hits if hit.search_term == target]
+        out_dir = report_root / report_dir_name(target)
+        written[target] = write_reports(subset, [target], out_dir, labels=labels)
+    return written
+
+
 def write_reports(
     hits: list[Hit],
     search_targets: list[str],

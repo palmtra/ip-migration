@@ -1,5 +1,5 @@
 ---
-# Example of reports/migration-review.yml produced by discovery.
+# Example of reports/<cidr>/migration-review.yml produced by discovery.
 # This is OUTPUT, not something to fill in by hand.
 # Addresses are documentation ranges only.
 customer: null

@@ -7,6 +7,7 @@ from typing import Any
 
 from ip_discovery.bgp import parse_running_config_bgp
 from ip_discovery.models import Record
+from ip_discovery.routes import parse_ios_routes
 from ip_discovery.tokens import parse_token
 
 IFACE_HEADER = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
@@ -16,6 +17,25 @@ IP_VR = re.compile(r"^ip virtual-router address\s+(\S+)", re.IGNORECASE)
 IFACE_VRF = re.compile(r"^vrf\s+(?:forwarding\s+)?(\S+)", re.IGNORECASE)
 IFACE_DESC = re.compile(r"^description\s+(.+)$", re.IGNORECASE)
 VR_MAC = re.compile(r"^ip virtual-router mac-address\s+(\S+)", re.IGNORECASE)
+EOS_ARP_RE = re.compile(
+    r"^(?P<ip>(?:\d{1,3}\.){3}\d{1,3})\s+\S+\s+(?P<mac>(?:[0-9a-fA-F]{4}\.){2}[0-9a-fA-F]{4})\s+(?P<iface>\S.*)$"
+)
+PREFIX_LIST_RE = re.compile(
+    r"^ip prefix-list\s+(?P<name>\S+)(?:\s+seq\s+\d+)?\s+permit\s+(?P<prefix>\S+)",
+    re.IGNORECASE,
+)
+BGP_ADV_RE = re.compile(
+    r"^\s*\*>?\s+(?P<prefix>\d+\.\d+\.\d+\.\d+/\d+)\s+(?P<nexthop>\d+\.\d+\.\d+\.\d+)"
+)
+MLAG_PEER_RE = re.compile(r"^peer-address\s*:\s*(\S+)", re.IGNORECASE)
+MLAG_DOMAIN_RE = re.compile(r"^domain-id\s*:\s*(\S+)", re.IGNORECASE)
+MLAG_LOCAL_RE = re.compile(r"^local-interface\s*:\s*(\S+)", re.IGNORECASE)
+MLAG_LINK_RE = re.compile(r"^peer-link\s*:\s*(\S+)", re.IGNORECASE)
+IFACE_UP_RE = re.compile(r"^(?P<name>\S+)\s+is up", re.IGNORECASE)
+INET_ADDR_RE = re.compile(r"Internet address is\s+(\S+)", re.IGNORECASE)
+VARP_ADDR_RE = re.compile(r"IP virtual router address is\s+(\S+)", re.IGNORECASE)
+VARP_MAC_RE = re.compile(r"IP virtual router MAC address is\s+(\S+)", re.IGNORECASE)
+VRF_IS_RE = re.compile(r"VRF is\s+(\S+)", re.IGNORECASE)
 
 
 def _read_json(path: Path) -> Any:
@@ -183,6 +203,85 @@ def _mlag_context(payload: Any) -> dict[str, Any]:
     return {key: value for key, value in context.items() if value not in (None, "")}
 
 
+def _as_text(payload: Any) -> str:
+    if payload is None:
+        return ""
+    if isinstance(payload, str):
+        return payload
+    if isinstance(payload, (dict, list)):
+        return json.dumps(payload)
+    return str(payload)
+
+
+def parse_eos_arp_text(text: str) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for raw in (text or "").splitlines():
+        match = EOS_ARP_RE.match(raw.strip())
+        if not match:
+            continue
+        iface = match.group("iface").split(",")[0].strip()
+        rows.append({"address": match.group("ip"), "mac": match.group("mac"), "interface": iface})
+    return rows
+
+
+def parse_eos_prefix_lists(text: str) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    for raw in (text or "").splitlines():
+        match = PREFIX_LIST_RE.match(raw.strip())
+        if match and parse_token(match.group("prefix")):
+            items.append({"name": match.group("name"), "prefix": match.group("prefix")})
+    return items
+
+
+def parse_eos_mlag_text(text: str) -> dict[str, str]:
+    context: dict[str, str] = {}
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        peer = MLAG_PEER_RE.match(line)
+        if peer:
+            context["peer_address"] = peer.group(1)
+        domain = MLAG_DOMAIN_RE.match(line)
+        if domain:
+            context["domain"] = domain.group(1)
+        local = MLAG_LOCAL_RE.match(line)
+        if local:
+            context["local_interface"] = local.group(1)
+        link = MLAG_LINK_RE.match(line)
+        if link:
+            context["peer_link"] = link.group(1)
+    return context
+
+
+def parse_eos_cli_interfaces(text: str) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        up = IFACE_UP_RE.match(line)
+        if up:
+            if current:
+                items.append(current)
+            current = {"name": up.group("name")}
+            continue
+        if current is None:
+            continue
+        inet = INET_ADDR_RE.search(line)
+        if inet:
+            current["address"] = inet.group(1)
+        varp = VARP_ADDR_RE.search(line)
+        if varp:
+            current["virtual"] = varp.group(1)
+        mac = VARP_MAC_RE.search(line)
+        if mac:
+            current["mac"] = mac.group(1)
+        vrf = VRF_IS_RE.search(line)
+        if vrf:
+            current["vrf"] = vrf.group(1)
+    if current:
+        items.append(current)
+    return items
+
+
 def records_from_arista(device_dir: Path, device: str, platform: str) -> list[Record]:
     records: list[Record] = []
     show_commands = _read_json(device_dir / "show_commands.json") or {}
@@ -219,6 +318,21 @@ def records_from_arista(device_dir: Path, device: str, platform: str) -> list[Re
                     },
                 )
             )
+        if isinstance(arp, str):
+            for row in parse_eos_arp_text(arp):
+                if not parse_token(row["address"]):
+                    continue
+                records.append(
+                    Record(
+                        device=device,
+                        platform=platform,
+                        category="arp",
+                        name=f"{row['interface']}:{row['address']}",
+                        field="address",
+                        values=(row["address"],),
+                        context={"mac": row["mac"], "interface": row["interface"]},
+                    )
+                )
 
     interfaces = _payload_for(show_commands, "show ip interface brief")
     iface_map = {}
@@ -260,6 +374,28 @@ def records_from_arista(device_dir: Path, device: str, platform: str) -> list[Re
                     {**value, "vrfName": name} if isinstance(value, dict) else value
                     for name, value in routes["vrfs"].items()
                 ]
+        elif isinstance(routes, str):
+            for route in parse_ios_routes(routes):
+                values = route.match_values()
+                if not values:
+                    continue
+                records.append(
+                    Record(
+                        device=device,
+                        platform=platform,
+                        category="route",
+                        name=route.prefix,
+                        field="prefix/nexthop",
+                        values=values,
+                        context={
+                            "routeType": route.protocol,
+                            "next_hop": route.next_hop,
+                            "interface": route.interface,
+                            "vrf": route.vrf,
+                        },
+                    )
+                )
+            continue
         for vrf in vrfs:
             routes_map = vrf.get("routes") if isinstance(vrf, dict) else None
             if not isinstance(routes_map, dict):
@@ -337,7 +473,7 @@ def records_from_arista(device_dir: Path, device: str, platform: str) -> list[Re
         )
 
     mlag_payload = _payload_for(show_commands, "show mlag")
-    mlag_ctx = _mlag_context(mlag_payload)
+    mlag_ctx = _mlag_context(mlag_payload) or parse_eos_mlag_text(_as_text(mlag_payload))
     peer = mlag_ctx.get("peer_address")
     if peer and parse_token(str(peer)):
         records.append(
@@ -351,6 +487,57 @@ def records_from_arista(device_dir: Path, device: str, platform: str) -> list[Re
                 context=mlag_ctx,
             )
         )
+
+    for payload in _payloads_for(show_commands, "show ip interface"):
+        if not isinstance(payload, str):
+            continue
+        for iface in parse_eos_cli_interfaces(payload):
+            if iface.get("address") and parse_token(str(iface["address"])):
+                records.append(
+                    Record(
+                        device=device,
+                        platform=platform,
+                        category="interface",
+                        name=str(iface["name"]),
+                        field="address",
+                        values=(str(iface["address"]),),
+                        context={"vrf": iface.get("vrf"), "source": "cli"},
+                    )
+                )
+            if iface.get("virtual") and parse_token(str(iface["virtual"])):
+                records.append(
+                    Record(
+                        device=device,
+                        platform=platform,
+                        category="interface",
+                        name=str(iface["name"]),
+                        field="varp",
+                        values=(str(iface["virtual"]),),
+                        context={
+                            "vrf": iface.get("vrf"),
+                            "virtual": True,
+                            "role": "varp",
+                            "mac": iface.get("mac"),
+                        },
+                    )
+                )
+
+    for payload in _payloads_for(show_commands, "advertised-routes"):
+        for match in BGP_ADV_RE.finditer(_as_text(payload)):
+            prefix = match.group("prefix")
+            if not parse_token(prefix):
+                continue
+            records.append(
+                Record(
+                    device=device,
+                    platform=platform,
+                    category="bgp_advertisement",
+                    name=prefix,
+                    field="advertised",
+                    values=(prefix,),
+                    context={"next_hop": match.group("nexthop")},
+                )
+            )
 
     running = _payload_for(show_commands, "show running-config")
     running_text = running if isinstance(running, str) else json.dumps(running or "")
@@ -417,4 +604,30 @@ def records_from_arista(device_dir: Path, device: str, platform: str) -> list[Re
                 context={"asn": item.asn, "vrf": item.vrf, "remote_as": item.remote_as},
             )
         )
+    for item in parse_eos_prefix_lists(running_text):
+        records.append(
+            Record(
+                device=device,
+                platform=platform,
+                category="prefix_list",
+                name=item["name"],
+                field="permit",
+                values=(item["prefix"],),
+            )
+        )
+    if not any(record.category == "arp" for record in records):
+        for row in parse_eos_arp_text(running_text):
+            if not parse_token(row["address"]):
+                continue
+            records.append(
+                Record(
+                    device=device,
+                    platform=platform,
+                    category="arp",
+                    name=f"{row['interface']}:{row['address']}",
+                    field="address",
+                    values=(row["address"],),
+                    context={"mac": row["mac"], "interface": row["interface"]},
+                )
+            )
     return records

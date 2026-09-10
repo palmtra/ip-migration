@@ -27,7 +27,9 @@ CIDR overlap, and a cross-device report is done in `python/ip_discovery`.
    from **shared**, each listed **device group**, and each listed **template**.
 3. `python/analyze_hits.py` matches the search CIDRs, including ARP entries
    and route next hops, and records whether a Palo object is shared.
-4. `reports/migration-review.yml` plus Markdown/CSV/JSON.
+4. `reports/<cidr>/migration-review.yml` plus Markdown/CSV/JSON in the same
+   folder. The CIDR folder replaces `.` with `-` and `/` with `_`
+   (`10.200.100.10/30` → `reports/10-200-100-10_30/`).
 
 ## What is collected
 
@@ -37,12 +39,13 @@ Auth: username/password over SSH (`network_cli`).
 
 | Source | Why it matters |
 | --- | --- |
-| Interfaces | SVIs and routed ports in the old block |
+| Interfaces | SVIs, VARP virtual IPs, routed ports |
 | ARP / ND (all VRFs) | Silent hosts that never appear in config |
 | Routes / VRF / BGP | Connected, static, BGP, next hops in the block |
 | BGP `network` statements | Advertisements to update during the swap |
+| Prefix-lists | Export filters that still permit the old block |
 | ACLs | Host and network ACEs using the old block |
-| Running-config | Fallback and BGP parse |
+| MLAG | Peer-address only if it sits in the search CIDR |
 
 IOS VRF list is parsed from `show vrf brief` / `show ip vrf`, then
 `show ip route vrf <name>` and `show ip arp vrf <name>` run for each VRF.
@@ -121,7 +124,11 @@ Cisco/Arista and Palo must use different accounts.
 
 ## Report
 
-`reports/migration-review.yml` is the engineer template: interfaces, VLANs,
-firewall objects/NAT/policy/VPN, switch BGP advertisements, ARP, and routes.
+Each search CIDR gets its own folder:
+
+`reports/10-200-100-10_30/migration-review.yml` (`.` → `-`, `/` → `_`).
+
+That YAML is the engineer template: interfaces, VLANs, firewall
+objects/NAT/policy/VPN, switch BGP advertisements, ARP, and routes.
 Each Palo hit includes `shared` and `location` / `device_group` / `template`.
 Markdown adds ARP and routing tables for review.

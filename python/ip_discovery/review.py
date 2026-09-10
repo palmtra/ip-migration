@@ -183,6 +183,7 @@ def _switch_others(hits: list[Hit]) -> list[dict[str, Any]]:
                 "bgp": bgp_blocks or None,
                 "arp": [_compact_hit(hit) for hit in device_hits if hit.category == "arp"] or None,
                 "mlag": [_compact_hit(hit) for hit in device_hits if hit.category == "mlag"] or None,
+                "prefix_lists": [_compact_hit(hit) for hit in device_hits if hit.category == "prefix_list"] or None,
                 "routes": [_compact_hit(hit) for hit in device_hits if hit.category == "route"] or None,
                 "interfaces": [_compact_hit(hit) for hit in device_hits if hit.category == "interface"] or None,
             }
