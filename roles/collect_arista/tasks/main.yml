@@ -21,10 +21,17 @@
       - interfaces
       - hardware
 
-# One eos_command with every show plus running-config exceeds command_timeout
-# on PEs (full BGP/RIB JSON). Batches get their own timeout; a slow batch
-# does not discard interface/ARP output.
-- name: Run EOS discovery command batches
+- name: Initialize EOS command merge lists
+  ansible.builtin.set_fact:
+    eos_all_commands: []
+    eos_all_stdout: []
+    eos_vrf_names:
+      - default
+
+# Do not dump show ip bgp vrf all | json: the Loc-RIB JSON on a PE routinely
+# exceeds command_timeout. BGP network statements come from running-config.
+# Collect RIB per VRF so one large table cannot fail the whole routing batch.
+- name: Run EOS light discovery batches
   arista.eos.eos_command:
     commands: "{{ item.commands }}"
   vars:
@@ -36,49 +43,97 @@
         - show ipv6 interface brief | json
         - show ip virtual-router | json
         - show mlag | json
-        - show vrf | json
         - show vlan | json
     - name: forwarding
       commands:
         - show ip arp vrf all | json
         - show ipv6 neighbor | json
         - show ip access-lists | json
-    - name: routing
-      commands:
-        - show ip route vrf all | json
-        - show ipv6 route vrf all | json
-        - show ip bgp summary vrf all | json
-        - show ip bgp vrf all | json
     - name: running-config
       commands:
         - show running-config
+    - name: bgp-summary
+      commands:
+        - show ip bgp summary vrf all | json
   loop_control:
     label: "{{ item.name }}"
-  register: eos_show_batches
+  register: eos_light_batches
   ignore_errors: true
 
-- name: Merge EOS command batches
-  ansible.builtin.set_fact:
-    eos_show:
-      commands: "{{ eos_merged_commands }}"
-      stdout: "{{ eos_merged_stdout }}"
-      invocation:
-        module_args:
-          commands: "{{ eos_merged_commands }}"
+- name: Record light EOS batches
+  ansible.builtin.include_tasks: append_show.yml
+  loop: "{{ eos_light_batches.results }}"
+  loop_control:
+    loop_var: result
+
+- name: Collect EOS VRF names
+  arista.eos.eos_command:
+    commands:
+      - show vrf | json
   vars:
-    eos_ok_batches: "{{ eos_show_batches.results | selectattr('failed', 'equalto', false) | list }}"
-    eos_merged_commands: "{{ eos_ok_batches | map(attribute='item.commands') | flatten }}"
-    eos_merged_stdout: "{{ eos_ok_batches | map(attribute='stdout') | flatten }}"
+    ansible_command_timeout: "{{ eos_command_timeout | default(600) }}"
+  register: eos_vrf_cmd
+  ignore_errors: true
+
+- name: Record EOS VRF command
+  ansible.builtin.include_tasks: append_show.yml
+  vars:
+    result: "{{ eos_vrf_cmd }}"
+
+- name: Set EOS VRF list from JSON
+  ansible.builtin.set_fact:
+    eos_vrf_names: "{{ (vrf_keys | default([])) | union(['default']) | unique | list }}"
+  when:
+    - not (eos_vrf_cmd.failed | default(false) | bool)
+    - (eos_vrf_cmd.stdout | default([]) | length) > 0
+  vars:
+    eos_vrf_blob: "{{ eos_vrf_cmd.stdout[0] }}"
+    eos_vrf_obj: "{{ eos_vrf_blob if (eos_vrf_blob is mapping) else (eos_vrf_blob | from_json) }}"
+    vrf_keys: "{{ (eos_vrf_obj.vrfs | default({})).keys() | list if (eos_vrf_obj.vrfs is mapping) else [] }}"
+
+- name: Build per-VRF EOS RIB commands
+  ansible.builtin.set_fact:
+    eos_rib_commands: "{{ eos_v4_rib + eos_v6_rib }}"
+  vars:
+    eos_v4_rib: "{{ eos_vrf_names | map('regex_replace', '^(.*)$', 'show ip route vrf \\1 | json') | list }}"
+    eos_v6_rib: "{{ eos_vrf_names | map('regex_replace', '^(.*)$', 'show ipv6 route vrf \\1 | json') | list }}"
+
+- name: Run EOS per-VRF route commands
+  arista.eos.eos_command:
+    commands: "{{ eos_rib_commands[item : item + 4] }}"
+  vars:
+    ansible_command_timeout: "{{ eos_command_timeout | default(600) }}"
+  loop: "{{ range(0, eos_rib_commands | length, 4) | list }}"
+  register: eos_route_batches
+  when: eos_rib_commands | length > 0
+  ignore_errors: true
+
+- name: Record EOS route batches
+  ansible.builtin.include_tasks: append_show.yml
+  loop: "{{ (eos_route_batches | default({})).results | default([]) }}"
+  loop_control:
+    loop_var: result
+  when: (eos_route_batches | default({})).results is defined
 
 - name: Warn on EOS batches that timed out
   ansible.builtin.debug:
     msg: >-
-      EOS batch '{{ item.item.name }}' failed on {{ inventory_hostname }}
-      ({{ item.msg | default('timeout or error') }}). Other batches were saved.
-  loop: "{{ eos_show_batches.results | selectattr('failed', 'equalto', true) | list }}"
+      EOS batch '{{ item.item.name | default(item.item) }}' failed on
+      {{ inventory_hostname }} ({{ item.msg | default('timeout or error') }}).
+      Other batches were saved.
+  loop: "{{ (eos_light_batches.results | default([])) + ((eos_route_batches | default({})).results | default([])) }}"
   loop_control:
-    label: "{{ item.item.name | default('batch') }}"
-  when: eos_show_batches.results | selectattr('failed', 'equalto', true) | list | length > 0
+    label: "{{ item.item.name | default(item.item) }}"
+  when: item.failed | default(false) | bool
+
+- name: Merge EOS command batches
+  ansible.builtin.set_fact:
+    eos_show:
+      commands: "{{ eos_all_commands | default([]) }}"
+      stdout: "{{ eos_all_stdout | default([]) }}"
+      invocation:
+        module_args:
+          commands: "{{ eos_all_commands | default([]) }}"
 
 - name: Require some EOS command output
   ansible.builtin.assert:
