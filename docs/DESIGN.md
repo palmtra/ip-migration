@@ -6,7 +6,7 @@ CIDR, inventory, Panorama group and template). This document is the design.
 Discovery is **read-only**. Inputs are:
 
 1. An Ansible inventory of devices (management IP, platform, OS).
-2. One or more search CIDRs (`vars/search.yml` or a local copy).
+2. One or more search CIDRs in `vars/search/<id>-<site>-<customer>.yml`.
 3. Credentials via environment variables.
 
 Everything else is pulled from the devices: VRFs, interface IPs, ARP,
@@ -23,7 +23,8 @@ CIDR overlap, and a cross-device report is done in `python/ip_discovery`.
 
 ## Pipeline
 
-1. Engineer lists devices in inventory and CIDRs in the search file.
+1. Engineer lists devices in inventory and CIDRs in one file per customer
+   (`vars/search/<id>-<site>-<customer>.yml`, selected with `-e search_job=`).
    Panorama needs device groups and templates on the Panorama host.
 2. `playbooks/collect.yml` connects read-only and writes `artifacts/<hostname>/`.
    IOS VRF names are discovered on the device. Panorama objects are gathered

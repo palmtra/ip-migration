@@ -17,7 +17,8 @@ collections/ansible_collections/
 inventories/production/
 inventories/*/hosts.yml
 !inventories/sample/hosts.yml
-vars/search.local.yml
+vars/search/*.yml
+!vars/search/_example.yml
 
 .env
 *.pem

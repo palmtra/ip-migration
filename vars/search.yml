@@ -1,9 +1,0 @@
----
-# Documentation-range example only. Copy to vars/search.local.yml for a
-# real migration CIDR (that file is gitignored).
-search_targets:
-  - 192.0.2.0/24
-# Optional labels for the report header. Not used to log into devices.
-customer: ""
-id: ""
-site: ""

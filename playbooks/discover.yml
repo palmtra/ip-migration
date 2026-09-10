@@ -6,6 +6,8 @@
   hosts: localhost
   gather_facts: false
   tasks:
+    - name: Resolve customer search file
+      ansible.builtin.include_tasks: tasks/resolve_search.yml
     - name: Analyze collected artifacts against search CIDRs
       ansible.builtin.command:
         argv:

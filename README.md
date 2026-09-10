@@ -25,9 +25,10 @@ cp inventories/sample/group_vars/*.yml inventories/production/group_vars/
 # edit inventories/production/hosts.yml
 # For Panorama: ansible_host is Panorama, plus palo_device_groups and palo_templates
 
-# 2. CIDR to find
-cp vars/search.yml vars/search.local.yml
-# edit search_targets in vars/search.local.yml
+# 2. One search file per customer: <id>-<site>-<customer>.yml
+python3 python/new_search.py \
+  --id INC-1042 --site DC1 --customer "Example Retail" \
+  --cidr 10.200.100.0/24
 
 export NETWORK_USERNAME='...'
 export NETWORK_PASSWORD='...'
@@ -36,7 +37,7 @@ export PALO_PASSWORD='...'
 
 ansible-playbook playbooks/discover.yml \
   -i inventories/production/hosts.yml \
-  -e search_file="$PWD/vars/search.local.yml"
+  -e search_job=INC-1042-DC1-Example-Retail
 ```
 
 Reports (under `reports/<cidr>/`, with `.` → `-` and `/` → `_`):
@@ -50,7 +51,7 @@ Re-run analysis without logging into devices:
 ```bash
 ansible-playbook playbooks/report.yml \
   -i inventories/production/hosts.yml \
-  -e search_file="$PWD/vars/search.local.yml"
+  -e search_job=INC-1042-DC1-Example-Retail
 ```
 
 Self-check without devices:

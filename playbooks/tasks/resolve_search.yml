@@ -1,0 +1,25 @@
+---
+- name: Resolve customer search file
+  ansible.builtin.set_fact:
+    search_file: "{{ resolved_search_file }}"
+  vars:
+    search_job_stem: "{{ (search_job | default('')) | regex_replace('\\.ya?ml$', '') }}"
+    resolved_search_file: "{{ (playbook_dir ~ '/../vars/search/' ~ search_job_stem ~ '.yml') if (search_job_stem | length > 0) else (search_file | default(playbook_dir ~ '/../vars/search/_example.yml', true)) }}"
+  run_once: true
+
+- name: Stat search file
+  ansible.builtin.stat:
+    path: "{{ search_file }}"
+  register: search_file_stat
+  delegate_to: localhost
+  run_once: true
+
+- name: Require search file
+  ansible.builtin.assert:
+    that:
+      - search_file_stat.stat.exists
+    fail_msg: >-
+      Search file not found: {{ search_file }}.
+      Put one YAML file per customer in vars/search/<id>-<site>-<customer>.yml
+      and pass -e search_job=<id>-<site>-<customer>
+  run_once: true

@@ -1,4 +1,7 @@
 ---
+- name: Resolve customer search file
+  ansible.builtin.include_tasks: resolve_search.yml
+
 - name: Ensure artifact root exists
   ansible.builtin.file:
     path: "{{ artifact_root }}"

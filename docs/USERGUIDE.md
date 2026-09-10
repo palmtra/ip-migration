@@ -8,10 +8,7 @@ Match rules and collector internals are in [DESIGN.md](DESIGN.md).
 
 | You have | Where it goes |
 | --- | --- |
-| Customer name | `vars/search.local.yml` → `customer` |
-| Customer / ticket ID | `vars/search.local.yml` → `id` |
-| Data centre name | `vars/search.local.yml` → `site` |
-| IP block(s) to find | `vars/search.local.yml` → `search_targets` |
+| Customer name, ID, data centre, IP block | One file: `vars/search/<id>-<site>-<customer>.yml` |
 | Each target device hostname + management IP + OS | `inventories/production/hosts.yml` |
 | Panorama management IP | same inventory, `paloalto` group |
 | Panorama **device group(s)** | `palo_device_groups` on the Panorama host |
@@ -39,7 +36,7 @@ These are required in practice even if they were not on the intake form:
 3. **Every device group that can hold the objects**, including child groups. A parent group does not pull child-group objects.
 4. **Templates for network/VPN** (interfaces, VARP-equivalent is on switches; on Palo: VR, statics, IKE, IPSec). Policy lives in device groups; interfaces/IKE live in templates. If you use **template stacks**, set `palo_template_stacks` as well.
 5. **Python 3 venv + Ansible collections** on the machine that runs the playbook (see setup below).
-6. **Do not commit** production inventory, CIDRs, or passwords. `inventories/production/` and `vars/search.local.yml` are gitignored.
+6. **Do not commit** production inventory, CIDRs, or passwords. `inventories/production/` and `vars/search/*.yml` (except `_example.yml`) are gitignored.
 
 Optional, but fill them if you have them:
 
@@ -66,7 +63,17 @@ Copy the sample files once (production copies stay local):
 mkdir -p inventories/production/group_vars
 cp inventories/sample/hosts.yml inventories/production/hosts.yml
 cp inventories/sample/group_vars/*.yml inventories/production/group_vars/
-cp vars/search.yml vars/search.local.yml
+```
+
+Create one search file per customer (name is `<id>-<site>-<customer>.yml`):
+
+```bash
+python3 python/new_search.py \
+  --id INC-1042 \
+  --site DC1 \
+  --customer "Example Retail" \
+  --cidr 10.200.100.0/24
+# writes vars/search/INC-1042-DC1-Example-Retail.yml
 ```
 
 ## 4. Worked example
@@ -81,7 +88,9 @@ Intake:
 - Panorama device group: `DG-DC1-PROD`
 - Panorama template: `TPL-DC1-NETWORK`
 
-### 4.1 Search file — `vars/search.local.yml`
+### 4.1 Search file — `vars/search/INC-1042-DC1-Example-Retail.yml`
+
+One YAML file per customer. Filename is `<id>-<site>-<customer>` with spaces turned into hyphens.
 
 ```yaml
 search_targets:
@@ -91,7 +100,7 @@ id: INC-1042
 site: DC1
 ```
 
-Add more CIDRs under `search_targets` if this ticket covers more than one block. Each CIDR is reported separately.
+Add more CIDRs under `search_targets` if this ticket covers more than one block. Each CIDR is reported separately. Other customers get their own files in `vars/search/`; you pick the file when you run.
 
 A host such as `10.200.100.10` or a `/30` is valid. `any` and `0.0.0.0/0` are ignored.
 
@@ -157,17 +166,17 @@ From the repo root, with the venv active:
 ```bash
 ansible-playbook playbooks/discover.yml \
   -i inventories/production/hosts.yml \
-  -e search_file="$PWD/vars/search.local.yml"
+  -e search_job=INC-1042-DC1-Example-Retail
 ```
 
-That logs into every host in the inventory, then writes reports.
+`search_job` is the filename in `vars/search/` without `.yml`. That logs into every host in the inventory, then writes reports.
 
 Limit to this customer's devices if the inventory file also holds other sites:
 
 ```bash
 ansible-playbook playbooks/discover.yml \
   -i inventories/production/hosts.yml \
-  -e search_file="$PWD/vars/search.local.yml" \
+  -e search_job=INC-1042-DC1-Example-Retail \
   -l 'DC1-LEAF01,DC1-LEAF02,dc1-acc-01,dc1-core-01,panorama-01'
 ```
 
@@ -192,7 +201,7 @@ Raw per-device CLI/API dumps stay in `artifacts/<hostname>/` (gitignored). Re-ru
 ```bash
 ansible-playbook playbooks/report.yml \
   -i inventories/production/hosts.yml \
-  -e search_file="$PWD/vars/search.local.yml"
+  -e search_job=INC-1042-DC1-Example-Retail
 ```
 
 ## 7. How to read `migration-review.yml`
@@ -226,7 +235,8 @@ Transit links, MLAG keepalives, and loopbacks **outside** the search CIDR are om
 | No Palo interfaces / IKE | `palo_templates` or `palo_template_stacks` |
 | Shared vs DG looks wrong | You listed each device group; child groups are not inherited automatically |
 | No ARP on firewalls | Panorama can reach managed devices; set `palo_serials` if auto-discovery is empty |
-| Empty report | CIDR does not appear on the listed devices, or `search_targets` was left as the sample `192.0.2.0/24` |
+| Empty report | CIDR does not appear on the listed devices, or you pointed `search_job` at the wrong customer file |
+| Search file not found | Filename is `vars/search/<id>-<site>-<customer>.yml` and `-e search_job=` matches the stem |
 | Enable password required | Set become on that host/group (default is off) |
 
 ## 9. What this does *not* do

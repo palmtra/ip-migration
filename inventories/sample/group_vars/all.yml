@@ -1,6 +1,7 @@
 ---
 artifact_root: "{{ playbook_dir }}/../artifacts"
-search_file: "{{ playbook_dir }}/../vars/search.yml"
+search_file: "{{ playbook_dir }}/../vars/search/_example.yml"
+search_job: ""
 report_root: "{{ playbook_dir }}/../reports"
 search_targets: []
 
