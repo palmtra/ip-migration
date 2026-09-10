@@ -40,6 +40,13 @@ export PALO_PASSWORD='...'
 ansible-playbook playbooks/discover.yml \
   -i inventories/production/hosts.yml \
   -e search_job=INC-1042-DC1-Example-Retail
+
+# Switches only (no Panorama API access yet for this customer):
+# ansible-playbook playbooks/discover.yml \
+#   -i inventories/production/hosts.yml \
+#   -e search_job=INC-1042-DC1-Example-Retail \
+#   -l network_devices
+# or: -l '!panorama'
 ```
 
 Reports (under `reports/<cidr>/`, with `.` → `-` and `/` → `_`):

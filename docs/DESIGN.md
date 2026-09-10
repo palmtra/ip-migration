@@ -60,7 +60,9 @@ NX-OS and EOS use `vrf all`.
 
 Auth: service account on the Panorama XML API. XML API + operational
 requests, no commit rights. Discovery talks to **Panorama**, not to
-firewalls directly.
+firewalls directly. Skip that play with `-l network_devices` or
+`-l '!panorama'` when a customer has no API access yet; empty
+`palo_device_groups` in the search file is fine only if the play does not run.
 
 Customer search file (`vars/search/<id>-<site>-<customer>.yml`):
 

@@ -22,7 +22,7 @@ OS values the inventory understands:
 | Arista EOS | `eos_devices` | `group_vars/eos_devices.yml` |
 | Palo Alto (Panorama) | `panorama` | `group_vars/panorama.yml`: API connection only; do **not** SSH firewalls |
 
-Inventory can hold the whole estate. Limit a run with `-l dc_dc1` (or hostnames). Per-customer Panorama scope is selected by `search_job`, not by editing hosts.yml.
+Inventory can hold the whole estate. Limit a run with `-l dc_dc1` (or hostnames). Skip Panorama with `-l network_devices` or `-l '!panorama'` if you do not have API access yet. Per-customer Panorama scope is selected by `search_job`, not by editing hosts.yml.
 
 ## 2. Critical extras (easy to miss)
 
@@ -191,6 +191,30 @@ ansible-playbook playbooks/discover.yml \
   -l 'dc_dc1,panorama'
 ```
 
+Skip Panorama when you do not have API access yet, or this customer has no device groups yet. Leave `panorama` out of the limit:
+
+```bash
+ansible-playbook playbooks/discover.yml \
+  -i inventories/production/hosts.yml \
+  -e search_job=INC-1042-DC1-Example-Retail \
+  -l network_devices
+```
+
+or exclude the group:
+
+```bash
+ansible-playbook playbooks/discover.yml \
+  -i inventories/production/hosts.yml \
+  -e search_job=INC-1042-DC1-Example-Retail \
+  -l '!panorama'
+```
+
+Ansible prints `skipping: no hosts matched` for the Panorama play. That is not a failure. You can omit `PALO_USERNAME` / `PALO_PASSWORD` on that run.
+
+Leave `palo_device_groups` and `palo_templates` empty in the customer file until you have them. If the Panorama play still runs with those lists empty, the playbook asserts and fails.
+
+When access is ready, add the groups and templates, then re-run with `-l panorama` (or include `panorama` in the limit). Existing switch artifacts are reused; `playbooks/report.yml` rebuilds the review after a full collect.
+
 Collection is read-only: no PAN-OS commit, no `state: present`.
 
 ## 6. Where the output goes
@@ -248,6 +272,8 @@ Transit links, MLAG keepalives, and loopbacks **outside** the search CIDR are om
 | No ARP on firewalls | Panorama can reach managed devices; set `palo_serials` if auto-discovery is empty |
 | Empty report | CIDR does not appear on the listed devices, or you pointed `search_job` at the wrong customer file |
 | Search file not found | Filename is `vars/search/<id>-<site>-<customer>.yml` and `-e search_job=` matches the stem |
+| Panorama play fails / no API access yet | Omit `panorama` from `-l`, or use `-l '!panorama'`. `skipping: no hosts matched` is OK |
+| Assert on `palo_device_groups` | The Panorama play ran with empty groups in the customer file; skip `panorama` until you have them |
 | Enable password required | Set become on that host/group (default is off) |
 
 ## 9. What this does *not* do
