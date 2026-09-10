@@ -6,8 +6,8 @@ __pycache__/
 .mypy_cache/
 *.egg-info/
 
-artifacts/
-reports/
+/artifacts/
+/reports/
 *.retry
 .vault_pass
 vault_pass.txt

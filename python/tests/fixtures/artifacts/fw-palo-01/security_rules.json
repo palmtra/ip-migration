@@ -1,0 +1,10 @@
+[
+  {
+    "name": "allow-web",
+    "source_ip": ["GRP-WEB"],
+    "destination_ip": ["any"],
+    "from_zone": ["trust"],
+    "to_zone": ["untrust"],
+    "action": "allow"
+  }
+]

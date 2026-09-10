@@ -1,0 +1,7 @@
+[
+  {
+    "name": "ike-partner",
+    "peer_ip_value": "203.0.113.50",
+    "local_ip_address": "10.50.12.2"
+  }
+]

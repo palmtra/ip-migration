@@ -1,0 +1,9 @@
+[
+  {
+    "name": "nat-web",
+    "source_addresses": ["N-OLD-USER"],
+    "destination_addresses": ["any"],
+    "source_translation_static_translated_address": "203.0.113.10",
+    "nat_type": "ipv4"
+  }
+]

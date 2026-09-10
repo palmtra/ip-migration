@@ -1,0 +1,17 @@
+[
+  {
+    "name": "H-WEB-01",
+    "address_type": "ip-netmask",
+    "value": "10.50.12.10/32"
+  },
+  {
+    "name": "N-OLD-USER",
+    "address_type": "ip-netmask",
+    "value": "10.50.12.0/24"
+  },
+  {
+    "name": "H-UNRELATED",
+    "address_type": "ip-netmask",
+    "value": "10.9.9.9/32"
+  }
+]

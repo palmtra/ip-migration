@@ -1,0 +1,8 @@
+{
+  "device": "fw-palo-01",
+  "mgmt_ip": "192.0.2.30",
+  "platform": "paloalto.panos",
+  "vendor": "paloalto",
+  "vsys": "vsys1",
+  "is_panorama": false
+}

@@ -1,0 +1,18 @@
+{
+  "stdout": [
+    "Interface              IP-Address      OK? Method Status                Protocol\nVlan12                 10.50.12.2      YES NVRAM  up                    up\nGigabitEthernet1/0/1   unassigned      YES unset  up                    up\n",
+    "Protocol  Address          Age (min)  Hardware Addr   Type   Interface\nInternet  10.50.12.1              -   001c.7300.0001  ARPA   Vlan12\nInternet  10.50.12.10            12   0050.56ab.1234  ARPA   Vlan12\nInternet  10.1.1.8               40   aabb.cc00.0100  ARPA   Vlan1\n",
+    "Gateway of last resort is 10.0.0.1 to network 0.0.0.0\n      10.50.12.0/24 is subnetted, 1 subnets\nC        10.50.12.0 is directly connected, Vlan12\nS     10.9.9.0/24 [1/0] via 10.0.0.1\n",
+    "Extended IP access list EDGE-IN\n    10 permit ip host 10.50.12.10 any\n    20 permit ip 10.50.12.0 0.0.0.255 any\n    30 deny ip any any\n"
+  ],
+  "invocation": {
+    "module_args": {
+      "commands": [
+        "show ip interface brief",
+        "show ip arp",
+        "show ip route",
+        "show ip access-lists"
+      ]
+    }
+  }
+}

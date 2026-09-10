@@ -1,0 +1,6 @@
+{
+  "device": "sw-cisco-01",
+  "mgmt_ip": "192.0.2.10",
+  "platform": "cisco.ios.ios",
+  "vendor": "cisco"
+}
