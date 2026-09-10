@@ -18,12 +18,12 @@
   register: palo_fib
   ignore_errors: true
 
-- name: Collect routes for each job subnet
+- name: Collect routes for each search CIDR
   paloaltonetworks.panos.panos_op:
     provider: "{{ provider }}"
     cmd: "show routing route destination {{ item }}"
   register: palo_route_destination
-  loop: "{{ job_subnets | default([]) }}"
+  loop: "{{ search_targets | default([]) }}"
   ignore_errors: true
 
 - name: Collect BGP peers

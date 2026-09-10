@@ -15,7 +15,9 @@
       - show ip route vrf all
       - show ipv6 route vrf all
       - show ip bgp summary vrf all
+      - show ip bgp vrf all
       - show vrf all
+      - show vlan brief
       - show ip access-lists
       - show ipv6 access-lists
       - show running-config

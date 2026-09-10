@@ -5,24 +5,16 @@
 - name: Build discovery report
   hosts: localhost
   gather_facts: false
-  pre_tasks:
-    - name: Load customer job
-      ansible.builtin.include_tasks: tasks/include_job.yml
   tasks:
-    - name: Analyze collected artifacts
+    - name: Analyze collected artifacts against search CIDRs
       ansible.builtin.command:
-        argv: "{{ analyze_argv }}"
-      vars:
-        analyze_base:
+        argv:
           - python3
           - "{{ playbook_dir }}/../python/analyze_hits.py"
           - --artifacts
           - "{{ artifact_root }}"
+          - --search
+          - "{{ search_file }}"
           - --out
           - "{{ report_root }}"
-        analyze_argv: >-
-          {{
-            analyze_base
-            + (['--job', job_file] if (job_file | default('') | length > 0) else ['--search', search_file])
-          }}
       changed_when: true

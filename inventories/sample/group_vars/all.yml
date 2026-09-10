@@ -2,12 +2,7 @@
 artifact_root: "{{ playbook_dir }}/../artifacts"
 search_file: "{{ playbook_dir }}/../vars/search.yml"
 report_root: "{{ playbook_dir }}/../reports"
-job_file: "{{ lookup('env', 'JOB_FILE') | default('', true) }}"
-job_vrfs: []
-job_vsys: []
-job_vlans: []
-job_subnets: []
-vrfs: []
+search_targets: []
 
 network_username: "{{ lookup('env', 'NETWORK_USERNAME') }}"
 network_password: "{{ lookup('env', 'NETWORK_PASSWORD') }}"

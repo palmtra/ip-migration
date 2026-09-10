@@ -1,13 +1,17 @@
 # IP migration discovery
 
-Read-only discovery for an IP subnet migration across Cisco/Arista switches and
-Palo Alto firewalls. Ansible collects device usage; Python matches hosts and
-CIDRs (including ARP and nested object groups) and writes an engineer report.
+Read-only discovery. You provide **device inventory**, **search CIDRs**, and
+**credentials**. Ansible logs into each device and the analyzer writes an
+engineer review of every place those CIDRs appear: interfaces, ARP, routes
+(including next hops), BGP advertisements, ACLs, and Palo objects / NAT /
+security / VPN.
 
-See [docs/DESIGN.md](docs/DESIGN.md) for architecture, match rules, and why
-this is not a pure-Ansible or Nornir-first design.
+No per-customer job file is required. VRF names and PAN-OS vsys are discovered
+from the devices.
 
-## Quick start
+See [docs/DESIGN.md](docs/DESIGN.md) for match rules and collectors.
+
+## Usable now
 
 ```bash
 python3 -m venv .venv
@@ -15,56 +19,48 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ansible-galaxy collection install -r collections/requirements.yml -p collections
 
-export NETWORK_USERNAME='netops'
+# 1. Inventory: copy the sample and put real management IPs locally (gitignored)
+mkdir -p inventories/production/group_vars
+cp inventories/sample/hosts.yml inventories/production/hosts.yml
+cp inventories/sample/group_vars/*.yml inventories/production/group_vars/
+# edit inventories/production/hosts.yml
+
+# 2. CIDR to find
+cp vars/search.yml vars/search.local.yml
+# edit search_targets in vars/search.local.yml
+
+export NETWORK_USERNAME='...'
 export NETWORK_PASSWORD='...'
-export PALO_USERNAME='svc-ip-migration'
+export PALO_USERNAME='...'
 export PALO_PASSWORD='...'
 
-# Edit a job (customer subnet, vsys, PE VRF) and device management IPs, then:
-export JOB_FILE="$PWD/jobs/tyson-foods.yml"
-ansible-playbook playbooks/discover.yml
+ansible-playbook playbooks/discover.yml \
+  -i inventories/production/hosts.yml \
+  -e search_file="$PWD/vars/search.local.yml"
 ```
 
-Reports: `reports/discovery.md`, `reports/discovery.csv`, `reports/discovery.json`, and `reports/job-filled.yml` (template with discovery filled in).
+Reports (under `reports/`):
 
-Analyze existing artifacts again without logging into devices:
+- `migration-review.yml` — engineer template (interfaces, ARP, BGP ads, objects)
+- `discovery.md` — readable review including ARP and routing tables
+- `discovery.csv` / `discovery.json` — full hit list
+
+Re-run analysis without logging into devices:
 
 ```bash
-JOB_FILE="$PWD/jobs/tyson-foods.yml" ansible-playbook playbooks/report.yml
+ansible-playbook playbooks/report.yml \
+  -i inventories/production/hosts.yml \
+  -e search_file="$PWD/vars/search.local.yml"
 ```
 
-Without a job file, `vars/search.yml` is used as before:
-
-```bash
-ansible-playbook playbooks/discover.yml
-```
-
-Run the matcher against checked-in fixtures:
+Self-check without devices:
 
 ```bash
 pytest
 python3 python/analyze_hits.py \
   --artifacts python/tests/fixtures/artifacts \
-  --job jobs/tyson-foods.yml \
-  --out reports
+  --search python/tests/fixtures/search.yml \
+  --out /tmp/ip-discovery-report
 ```
 
-A job drives **search targets** (the subnet plus known handoff IPs), **VRFs** on agg PEs (`show ip route vrf …`), and **vsys** on PAN-OS. Routing is collected as structured prefix/protocol/next-hop/VRF — including defaults whose next hop sits in the migrating block.
-
-## Layout
-
-| Path | Role |
-| --- | --- |
-| `jobs/` | Per-customer migration spec (subnet, vsys, VRF, VLANs, expected interfaces) |
-| `inventories/sample/hosts.yml` | Device management IPs by platform (firewall, aggpe, switch) |
-| `vars/search.yml` | Fallback CIDRs when no job file is set |
-| `playbooks/collect.yml` | Read-only collection |
-| `playbooks/report.yml` | Analyze only |
-| `playbooks/discover.yml` | Collect + analyze |
-| `roles/collect_*` | Per-platform commands and API gathers |
-| `python/ip_discovery/` | Normalize, expand groups, match, report |
-| `artifacts/` | Per-device dumps (gitignored) |
-| `reports/` | Engineer output (gitignored) |
-
-Collection is read-only: no PAN-OS commit, no `state: present`, no switch
-config writes.
+Collection is read-only: no PAN-OS commit, no `state: present`, no config writes.

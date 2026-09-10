@@ -1,0 +1,50 @@
+---
+- name: Gather address objects for {{ palo_vsys_item }}
+  paloaltonetworks.panos.panos_address_object:
+    provider: "{{ provider }}"
+    vsys: "{{ palo_vsys_item }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_addresses
+  ignore_errors: true
+
+- name: Gather address groups for {{ palo_vsys_item }}
+  paloaltonetworks.panos.panos_address_group:
+    provider: "{{ provider }}"
+    vsys: "{{ palo_vsys_item }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_address_groups
+  ignore_errors: true
+
+- name: Gather security rules for {{ palo_vsys_item }}
+  paloaltonetworks.panos.panos_security_rule:
+    provider: "{{ provider }}"
+    vsys: "{{ palo_vsys_item }}"
+    device_group: "{{ palo_device_group | default(omit) }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_security_rules
+  ignore_errors: true
+
+- name: Gather NAT rules for {{ palo_vsys_item }}
+  paloaltonetworks.panos.panos_nat_rule2:
+    provider: "{{ provider }}"
+    vsys: "{{ palo_vsys_item }}"
+    device_group: "{{ palo_device_group | default(omit) }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_nat_rules
+  ignore_errors: true
+
+- name: Accumulate vsys objects
+  ansible.builtin.set_fact:
+    gathered_addresses: "{{ gathered_addresses + (address_items | map('combine', {'vsys': palo_vsys_item}) | list) }}"
+    gathered_address_groups: "{{ gathered_address_groups + (group_items | map('combine', {'vsys': palo_vsys_item}) | list) }}"
+    gathered_security_rules: "{{ gathered_security_rules + (rule_items | map('combine', {'vsys': palo_vsys_item}) | list) }}"
+    gathered_nat_rules: "{{ gathered_nat_rules + (nat_items | map('combine', {'vsys': palo_vsys_item}) | list) }}"
+  vars:
+    address_items: "{{ palo_addresses.gathered | default([]) }}"
+    group_items: "{{ palo_address_groups.gathered | default([]) }}"
+    rule_items: "{{ palo_security_rules.gathered | default([]) }}"
+    nat_items: "{{ palo_nat_rules.gathered | default([]) }}"

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ip_discovery.bgp import parse_running_config_bgp
 from ip_discovery.models import Record
 from ip_discovery.tokens import parse_token
 
@@ -48,29 +49,38 @@ def records_from_arista(device_dir: Path, device: str, platform: str) -> list[Re
     records: list[Record] = []
     show_commands = _read_json(device_dir / "show_commands.json") or {}
 
-    arp = _payload_for(show_commands, "show ip arp")
-    neighbors = []
-    if isinstance(arp, dict):
-        neighbors = arp.get("ipV4Neighbors") or arp.get("ipv4Neighbors") or []
-    for neighbor in neighbors:
-        address = neighbor.get("address") or neighbor.get("ipAddress")
-        if not parse_token(str(address or "")):
-            continue
-        iface = neighbor.get("interface") or neighbor.get("port") or "unknown"
-        records.append(
-            Record(
-                device=device,
-                platform=platform,
-                category="arp",
-                name=f"{iface}:{address}",
-                field="address",
-                values=(str(address),),
-                context={
-                    "mac": neighbor.get("hwAddress") or neighbor.get("macAddress"),
-                    "interface": iface,
-                },
+    arp_payloads = _payloads_for(show_commands, "show ip arp")
+    for arp in arp_payloads:
+        neighbor_rows = []
+        if isinstance(arp, dict):
+            neighbor_rows.extend(arp.get("ipV4Neighbors") or arp.get("ipv4Neighbors") or [])
+            vrfs = arp.get("vrfs") if isinstance(arp.get("vrfs"), dict) else {}
+            for vrf_name, vrf_data in vrfs.items():
+                if not isinstance(vrf_data, dict):
+                    continue
+                for neighbor in vrf_data.get("ipV4Neighbors") or vrf_data.get("ipv4Neighbors") or []:
+                    if isinstance(neighbor, dict):
+                        neighbor_rows.append({**neighbor, "vrf": vrf_name})
+        for neighbor in neighbor_rows:
+            address = neighbor.get("address") or neighbor.get("ipAddress")
+            if not parse_token(str(address or "")):
+                continue
+            iface = neighbor.get("interface") or neighbor.get("port") or "unknown"
+            records.append(
+                Record(
+                    device=device,
+                    platform=platform,
+                    category="arp",
+                    name=f"{iface}:{address}",
+                    field="address",
+                    values=(str(address),),
+                    context={
+                        "mac": neighbor.get("hwAddress") or neighbor.get("macAddress"),
+                        "interface": iface,
+                        "vrf": neighbor.get("vrf"),
+                    },
+                )
             )
-        )
 
     interfaces = _payload_for(show_commands, "show ip interface brief")
     iface_map = {}
@@ -174,4 +184,31 @@ def records_from_arista(device_dir: Path, device: str, platform: str) -> list[Re
                             context={"sequence": sequence.get("sequenceNumber")},
                         )
                     )
+    running = _payload_for(show_commands, "show running-config")
+    running_text = running if isinstance(running, str) else json.dumps(running or "")
+    advertisements, neighbors = parse_running_config_bgp(running_text)
+    for item in advertisements:
+        records.append(
+            Record(
+                device=device,
+                platform=platform,
+                category="bgp_advertisement",
+                name=f"{item.vrf}:{item.prefix}",
+                field="network",
+                values=(item.prefix,),
+                context={"asn": item.asn, "vrf": item.vrf},
+            )
+        )
+    for item in neighbors:
+        records.append(
+            Record(
+                device=device,
+                platform=platform,
+                category="bgp_neighbor",
+                name=f"{item.vrf}:{item.peer}",
+                field="peer",
+                values=(item.peer,),
+                context={"asn": item.asn, "vrf": item.vrf, "remote_as": item.remote_as},
+            )
+        )
     return records

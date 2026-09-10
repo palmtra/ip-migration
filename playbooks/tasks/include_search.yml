@@ -1,0 +1,17 @@
+---
+- name: Ensure artifact root exists
+  ansible.builtin.file:
+    path: "{{ artifact_root }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  run_once: true
+
+- name: Load search targets
+  ansible.builtin.include_vars:
+    file: "{{ search_file }}"
+    name: search_data
+
+- name: Expose search CIDRs to the play
+  ansible.builtin.set_fact:
+    search_targets: "{{ search_data.search_targets | default([]) }}"

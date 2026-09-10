@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
+from ip_discovery.bgp import parse_running_config_bgp
 from ip_discovery.models import Record
 from ip_discovery.routes import parse_ios_routes
 from ip_discovery.tokens import parse_token
@@ -32,6 +33,12 @@ def _read_json(path: Path) -> Any:
 def _command_outputs(show_commands: dict[str, Any]) -> list[tuple[str, str]]:
     if not show_commands:
         return []
+    if isinstance(show_commands.get("results"), list):
+        pairs: list[tuple[str, str]] = []
+        for result in show_commands["results"]:
+            if isinstance(result, dict):
+                pairs.extend(_command_outputs(result))
+        return pairs
     invocation = (show_commands.get("invocation") or {}).get("module_args") or {}
     commands = invocation.get("commands") or show_commands.get("commands") or []
     stdout = show_commands.get("stdout") or []
@@ -186,6 +193,33 @@ def records_from_cisco(device_dir: Path, device: str, platform: str) -> list[Rec
                     context={"line": stripped},
                 )
             )
+
+    running = _output_for(show_commands, "running-config")
+    advertisements, neighbors = parse_running_config_bgp(running)
+    for item in advertisements:
+        records.append(
+            Record(
+                device=device,
+                platform=platform,
+                category="bgp_advertisement",
+                name=f"{item.vrf}:{item.prefix}",
+                field="network",
+                values=(item.prefix,),
+                context={"asn": item.asn, "vrf": item.vrf},
+            )
+        )
+    for item in neighbors:
+        records.append(
+            Record(
+                device=device,
+                platform=platform,
+                category="bgp_neighbor",
+                name=f"{item.vrf}:{item.peer}",
+                field="peer",
+                values=(item.peer,),
+                context={"asn": item.asn, "vrf": item.vrf, "remote_as": item.remote_as},
+            )
+        )
     return _dedupe(records)
 
 

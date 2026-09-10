@@ -1,0 +1,44 @@
+---
+- name: Collect vsys inventory
+  paloaltonetworks.panos.panos_op:
+    provider: "{{ provider }}"
+    cmd: show vsys
+  register: palo_show_vsys
+  ignore_errors: true
+
+- name: Collect running config for vsys parse
+  paloaltonetworks.panos.panos_op:
+    provider: "{{ provider }}"
+    cmd: show config running
+  register: palo_running_config
+  ignore_errors: true
+
+- name: Save vsys discovery text
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/vsys_raw.txt"
+    mode: "0644"
+    content: "{{ (palo_show_vsys.stdout | default('')) ~ '\n' ~ (palo_running_config.stdout | default('')) }}"
+  delegate_to: localhost
+
+- name: Parse vsys names
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ playbook_dir }}/../python/parse_text.py"
+      - vsys
+      - --file
+      - "{{ device_artifact_dir }}/vsys_raw.txt"
+  register: palo_vsys_parsed
+  delegate_to: localhost
+  changed_when: false
+
+- name: Set vsys list
+  ansible.builtin.set_fact:
+    palo_vsys_list: "{{ (palo_vsys_parsed.stdout | default('[\"vsys1\"]') | from_json) | unique }}"
+
+- name: Save running config artifact
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/running_config.json"
+    mode: "0644"
+    content: "{{ palo_running_config | default({}, true) | to_nice_json }}"
+  delegate_to: localhost

@@ -1,7 +1,9 @@
 ---
-# CIDRs and/or host IPs to find across collected device data.
-# A host match also hits containing objects, groups, ACLs, NAT, VPN, and ARP.
-# A CIDR match hits any host or overlapping prefix in that block.
+# Documentation-range example only. Copy to vars/search.local.yml for a
+# real migration CIDR (that file is gitignored).
 search_targets:
-  - 10.50.12.0/24
-  # - 10.50.12.10
+  - 192.0.2.0/24
+# Optional labels for the report header. Not used to log into devices.
+customer: ""
+id: ""
+site: ""

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 from ip_discovery.models import Record
 from ip_discovery.routes import parse_palo_routes
-from ip_discovery.tokens import extract_tokens_from_text
+from ip_discovery.tokens import extract_tokens_from_text, parse_token
+
+PALO_ARP_RE = re.compile(
+    r"(?P<ip>(?:\d{1,3}\.){3}\d{1,3})\s+(?P<mac>(?:[0-9a-fA-F]{2}[:.-]){5}[0-9a-fA-F]{2})\s+(?P<iface>\S+)"
+)
 
 
 def _read_json(path: Path) -> Any:
@@ -74,7 +79,10 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
                 name=name,
                 field="value",
                 values=values,
-                context={"type": item.get("address_type") or item.get("type")},
+                context={
+                    "type": item.get("address_type") or item.get("type"),
+                    "vsys": item.get("vsys"),
+                },
             )
         )
 
@@ -90,7 +98,7 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
                 field="members",
                 values=(),
                 refs=tuple(str(member) for member in members),
-                context={"description": item.get("description")},
+                context={"description": item.get("description"), "vsys": item.get("vsys")},
             )
         )
 
@@ -110,6 +118,7 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
                     "from": item.get("from_zone") or item.get("from_zones"),
                     "to": item.get("to_zone") or item.get("to_zones"),
                     "action": item.get("action"),
+                    "vsys": item.get("vsys"),
                 },
             )
         )
@@ -247,19 +256,46 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
             )
         )
 
-    for category, filename, field_name in (
-        ("interface", "op_interfaces.json", "interface"),
-        ("arp", "op_arp.json", "arp"),
-    ):
-        text = _op_text(_read_json(device_dir / filename))
-        for token in extract_tokens_from_text(text):
+    iface_text = _op_text(_read_json(device_dir / "op_interfaces.json"))
+    for token in extract_tokens_from_text(iface_text):
+        records.append(
+            Record(
+                device=device,
+                platform=platform,
+                category="interface",
+                name=token.raw,
+                field="interface",
+                values=(token.raw,),
+            )
+        )
+
+    arp_text = _op_text(_read_json(device_dir / "op_arp.json"))
+    arp_matches = list(PALO_ARP_RE.finditer(arp_text))
+    if arp_matches:
+        for match in arp_matches:
+            ip_addr = match.group("ip")
+            if not parse_token(ip_addr):
+                continue
             records.append(
                 Record(
                     device=device,
                     platform=platform,
-                    category=category,
+                    category="arp",
+                    name=f"{match.group('iface')}:{ip_addr}",
+                    field="address",
+                    values=(ip_addr,),
+                    context={"mac": match.group("mac"), "interface": match.group("iface")},
+                )
+            )
+    else:
+        for token in extract_tokens_from_text(arp_text):
+            records.append(
+                Record(
+                    device=device,
+                    platform=platform,
+                    category="arp",
                     name=token.raw,
-                    field=field_name,
+                    field="arp",
                     values=(token.raw,),
                 )
             )

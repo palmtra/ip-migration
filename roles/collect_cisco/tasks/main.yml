@@ -1,8 +1,4 @@
 ---
-- name: Resolve VRFs to collect
-  ansible.builtin.set_fact:
-    collect_vrfs: "{{ ((vrfs | default([])) + (job_vrfs | default([]))) | unique }}"
-
 - name: Write device metadata
   ansible.builtin.copy:
     dest: "{{ device_artifact_dir }}/meta.json"
@@ -14,7 +10,7 @@
       mgmt_ip: "{{ ansible_host | default(inventory_hostname) }}"
       platform: "{{ ansible_network_os }}"
       vendor: cisco
-      vrfs: "{{ collect_vrfs }}"
+      role: "{{ 'aggpe' if 'aggpe' in group_names else 'switch' }}"
   delegate_to: localhost
 
 - name: Collect Cisco IOS / IOS-XE

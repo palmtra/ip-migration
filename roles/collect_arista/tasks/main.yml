@@ -10,7 +10,8 @@
       mgmt_ip: "{{ ansible_host | default(inventory_hostname) }}"
       platform: arista.eos.eos
       vendor: arista
-      vrfs: "{{ ((vrfs | default([])) + (job_vrfs | default([]))) | unique }}"
+      role: "{{ 'aggpe' if 'aggpe' in group_names else 'switch' }}"
+      vrfs: []
   delegate_to: localhost
 
 - name: Gather EOS facts
@@ -29,7 +30,9 @@
       - show ip route vrf all | json
       - show ipv6 route vrf all | json
       - show ip bgp summary vrf all | json
+      - show ip bgp vrf all | json
       - show vrf | json
+      - show vlan | json
       - show ip access-lists | json
       - show running-config
   register: eos_show

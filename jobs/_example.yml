@@ -1,62 +1,50 @@
 ---
-# Customer IP-migration job. Copy to jobs/<slug>.yml
-# This is the machine-readable form of the engineer markdown template.
-schema_version: 1
-
-customer: Example Customer
-id: "0000"
-site: example-site
-
-# Block being migrated. Hosts and overlapping prefixes are matched.
-subnet: 192.0.2.0/29
-# Extra CIDRs or hosts to search (optional)
-extra_search: []
-
+# Example of reports/migration-review.yml produced by discovery.
+# This is OUTPUT, not something to fill in by hand.
+# Addresses are documentation ranges only.
+customer: null
+id: null
+site: null
+subnet: 192.0.2.0/24
+search_targets:
+  - 192.0.2.0/24
 vlans:
   - id: 100
-    name: example_outside
-    role: outside
-
-# Known L3 handoff IPs. Discovery still searches the whole subnet.
+    devices:
+      - sw-eos-01
 interfaces:
   - firewall:
+      name: ethernet1/1
       address: 192.0.2.3/29
+      device: fw-panos-01
       vsys: vsys1
-      desc: example_outside
-      virtual_router: null
-  - aggpe:
+  - switch:
+      name: Vlan100
       address: 192.0.2.1/29
-      vrf: v0000001a
-      desc: example_outside
-      vlan: 100
-
-# Device management IPs used to log in. Leave ansible_host empty until known.
-targets:
-  firewalls:
-    - name: fw-example-01
-      ansible_host: null
-      vsys: vsys1
-  aggpe:
-    - name: pe-example-01
-      ansible_host: null
-      network_os: arista.eos.eos
-      vrf: v0000001a
-  switches: []
-
-# Categories to fill. Discovery writes these; null means not yet collected.
+      device: pe-eos-01
+      vrf: tenant-a
 others:
   - firewall:
-      object: null
-      object_groups: null
-      nat: null
-      gp_portal: null
-      gp_gateway: null
-      ipsec_tunnels: null
-      security_policies: null
-      routes: null
-      arp: null
-  - aggpe:
-      routes: null
-      bgp: null
-      arp: null
-      interfaces: null
+      object: []
+      object_groups: []
+      nat: []
+      gp_portal: []
+      gp_gateway: []
+      ipsec_tunnels: []
+      security_policies: []
+      routes: []
+      arp: []
+  - switch:
+      - name: pe-eos-01
+        bgp:
+          - asn: 65000
+            vrf: tenant-a
+            advertisements:
+              - 192.0.2.0/29
+              - 192.0.2.0/30
+        arp:
+          - ip: 192.0.2.3
+            mac: 0000.5e00.5301
+            interface: Vlan100
+        routes: []
+        interfaces: []

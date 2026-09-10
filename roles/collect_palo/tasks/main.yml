@@ -10,13 +10,46 @@
       mgmt_ip: "{{ ansible_host | default(inventory_hostname) }}"
       platform: paloalto.panos
       vendor: paloalto
-      vsys: "{{ palo_vsys }}"
+      role: firewall
       is_panorama: "{{ palo_is_panorama }}"
-      job_subnets: "{{ job_subnets | default([]) }}"
   delegate_to: localhost
 
-- name: Collect PAN-OS configuration objects
-  ansible.builtin.include_tasks: config.yml
+- name: Discover virtual systems
+  ansible.builtin.include_tasks: discover_vsys.yml
 
 - name: Collect PAN-OS operational state
   ansible.builtin.include_tasks: operational.yml
+
+- name: Initialize gathered config lists
+  ansible.builtin.set_fact:
+    gathered_addresses: []
+    gathered_address_groups: []
+    gathered_security_rules: []
+    gathered_nat_rules: []
+
+- name: Gather policy objects for each vsys
+  ansible.builtin.include_tasks: config_vsys.yml
+  loop: "{{ palo_vsys_list }}"
+  loop_control:
+    loop_var: palo_vsys_item
+
+- name: Gather shared VPN and routing config
+  ansible.builtin.include_tasks: config_shared.yml
+
+- name: Save PAN-OS config artifacts
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/{{ item.file }}"
+    mode: "0644"
+    content: "{{ item.content | default([], true) | to_nice_json }}"
+  loop:
+    - file: addresses.json
+      content: "{{ gathered_addresses }}"
+    - file: address_groups.json
+      content: "{{ gathered_address_groups }}"
+    - file: security_rules.json
+      content: "{{ gathered_security_rules }}"
+    - file: nat_rules.json
+      content: "{{ gathered_nat_rules }}"
+  loop_control:
+    label: "{{ item.file }}"
+  delegate_to: localhost

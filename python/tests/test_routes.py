@@ -5,46 +5,46 @@ from ip_discovery.routes import parse_ios_routes, parse_palo_routes
 
 def test_ios_connected_and_nexthop_in_block():
     text = """
-      63.99.122.176/29 is subnetted, 1 subnets
-C        63.99.122.176 is directly connected, Vlan3051
-S*    0.0.0.0/0 [1/0] via 63.99.122.179
-B        10.20.0.0/16 [20/0] via 63.99.122.177
+      10.50.12.0/24 is subnetted, 1 subnets
+C        10.50.12.0 is directly connected, Vlan12
+S*    0.0.0.0/0 [1/0] via 10.50.12.2
+B        10.20.0.0/16 [20/0] via 10.50.12.10
 """
-    routes = parse_ios_routes(text, default_vrf="v0000001a")
+    routes = parse_ios_routes(text, default_vrf="tenant-a")
     by_prefix = {route.prefix: route for route in routes}
-    assert by_prefix["63.99.122.176/29"].protocol == "connected"
-    assert by_prefix["0.0.0.0/0"].next_hop == "63.99.122.179"
-    assert by_prefix["10.20.0.0/16"].next_hop == "63.99.122.177"
-    assert by_prefix["10.20.0.0/16"].vrf == "v0000001a"
+    assert by_prefix["10.50.12.0/24"].protocol == "connected"
+    assert by_prefix["0.0.0.0/0"].next_hop == "10.50.12.2"
+    assert by_prefix["10.20.0.0/16"].next_hop == "10.50.12.10"
+    assert by_prefix["10.20.0.0/16"].vrf == "tenant-a"
 
 
 def test_palo_static_default_via_handoff():
     text = """
 virtual router vsys1
-0.0.0.0/0           63.99.122.177   10     A S    ethernet1/1
-63.99.122.176/29    63.99.122.179   0      A C    ethernet1/1
+0.0.0.0/0           10.50.12.2      10     A S    ethernet1/1
+10.50.12.0/24       10.50.12.2      0      A C    ethernet1/1
 """
     routes = parse_palo_routes(text)
     default = next(route for route in routes if route.prefix == "0.0.0.0/0")
     assert default.protocol == "static"
-    assert default.next_hop == "63.99.122.177"
-    connected = next(route for route in routes if route.prefix == "63.99.122.176/29")
+    assert default.next_hop == "10.50.12.2"
+    connected = next(route for route in routes if route.prefix == "10.50.12.0/24")
     assert connected.protocol == "connected"
 
 
 def test_route_nexthop_is_a_hit():
     records = [
         Record(
-            device="pe-oma-01",
+            device="pe-eos-01",
             platform="arista.eos.eos",
             category="route",
             name="0.0.0.0/0",
             field="prefix/nexthop",
-            values=("63.99.122.179",),
-            context={"protocol": "static", "next_hop": "63.99.122.179", "vrf": "v0000001a"},
+            values=("10.50.12.2",),
+            context={"protocol": "static", "next_hop": "10.50.12.2", "vrf": "tenant-a"},
         )
     ]
-    hits = find_hits(records, ["63.99.122.176/29"])
+    hits = find_hits(records, ["10.50.12.0/24"])
     assert len(hits) == 1
-    assert hits[0].matched_value == "63.99.122.179"
-    assert hits[0].context["vrf"] == "v0000001a"
+    assert hits[0].matched_value == "10.50.12.2"
+    assert hits[0].context["vrf"] == "tenant-a"

@@ -16,24 +16,50 @@
       - show ipv6 route
       - show ip vrf
       - show vrf brief
+      - show vlan brief
+      - show ip bgp summary
       - show ip access-lists
       - show ipv6 access-lists
       - show running-config
   register: ios_show
 
+- name: Save VRF list text for parsing
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/vrf_brief.txt"
+    mode: "0644"
+    content: "{{ ios_show.stdout | default([]) | join('\n') }}"
+  delegate_to: localhost
+
+- name: Discover VRF names from the device
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ playbook_dir }}/../python/parse_text.py"
+      - vrfs
+      - --file
+      - "{{ device_artifact_dir }}/vrf_brief.txt"
+  register: ios_vrf_parsed
+  delegate_to: localhost
+  changed_when: false
+
+- name: Set discovered VRFs
+  ansible.builtin.set_fact:
+    discovered_vrfs: "{{ (ios_vrf_parsed.stdout | default('[]') | from_json) | unique }}"
+
 - name: Build VRF-scoped IOS commands
   ansible.builtin.set_fact:
     ios_vrf_commands: "{{ vrf_route + vrf_arp + vrf_bgp }}"
   vars:
-    vrf_route: "{{ collect_vrfs | map('regex_replace', '^(.*)$', 'show ip route vrf \\1') | list }}"
-    vrf_arp: "{{ collect_vrfs | map('regex_replace', '^(.*)$', 'show ip arp vrf \\1') | list }}"
-    vrf_bgp: "{{ collect_vrfs | map('regex_replace', '^(.*)$', 'show ip bgp vpnv4 vrf \\1 summary') | list }}"
+    vrf_route: "{{ discovered_vrfs | map('regex_replace', '^(.*)$', 'show ip route vrf \\1') | list }}"
+    vrf_arp: "{{ discovered_vrfs | map('regex_replace', '^(.*)$', 'show ip arp vrf \\1') | list }}"
+    vrf_bgp: "{{ discovered_vrfs | map('regex_replace', '^(.*)$', 'show ip bgp vpnv4 vrf \\1 summary') | list }}"
 
-- name: Run IOS VRF routing commands
+- name: Run IOS VRF routing and ARP commands in batches
   cisco.ios.ios_command:
-    commands: "{{ ios_vrf_commands }}"
+    commands: "{{ ios_vrf_commands[item:item + 18] }}"
+  loop: "{{ range(0, ios_vrf_commands | length, 18) | list }}"
   register: ios_vrf_show
-  when: collect_vrfs | length > 0
+  when: ios_vrf_commands | length > 0
   ignore_errors: true
 
 - name: Save IOS command output

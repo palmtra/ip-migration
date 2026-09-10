@@ -5,8 +5,8 @@
   vars:
     device_artifact_dir: "{{ artifact_root }}/{{ inventory_hostname }}"
   pre_tasks:
-    - name: Load customer job
-      ansible.builtin.include_tasks: tasks/include_job.yml
+    - name: Load search CIDRs
+      ansible.builtin.include_tasks: tasks/include_search.yml
     - name: Create per-device artifact directory
       ansible.builtin.file:
         path: "{{ device_artifact_dir }}"
@@ -25,8 +25,8 @@
   vars:
     device_artifact_dir: "{{ artifact_root }}/{{ inventory_hostname }}"
   pre_tasks:
-    - name: Load customer job
-      ansible.builtin.include_tasks: tasks/include_job.yml
+    - name: Load search CIDRs
+      ansible.builtin.include_tasks: tasks/include_search.yml
     - name: Create per-device artifact directory
       ansible.builtin.file:
         path: "{{ device_artifact_dir }}"

@@ -13,8 +13,10 @@ __pycache__/
 vault_pass.txt
 
 collections/ansible_collections/
+inventories/production/
 inventories/*/hosts.yml
 !inventories/sample/hosts.yml
+vars/search.local.yml
 
 .env
 *.pem

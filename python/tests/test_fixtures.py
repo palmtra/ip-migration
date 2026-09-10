@@ -19,6 +19,7 @@ def test_fixture_artifacts_find_block_usage():
     assert "nat_rule" in categories
     assert "ike_gateway" in categories
     assert "route" in categories
+    assert "bgp_advertisement" in categories
     assert any(
         hit.category == "route" and hit.matched_value in {"10.50.12.1", "10.50.12.10", "10.50.12.0/24", "10.50.12.2"}
         for hit in hits
