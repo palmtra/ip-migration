@@ -33,3 +33,10 @@ def test_single_host_hits_arp_and_object():
     assert any(hit.category == "arp" and hit.device == "sw-cisco-01" for hit in hits)
     assert any(hit.name == "H-WEB-01" for hit in hits)
     assert any(hit.name == "allow-web" for hit in hits)
+    assert any(hit.category == "address_object" and hit.context.get("shared") is True for hit in hits)
+    assert any(
+        hit.category == "address_object"
+        and hit.context.get("shared") is False
+        and hit.context.get("device_group") == "DG-SITE-A"
+        for hit in hits
+    )

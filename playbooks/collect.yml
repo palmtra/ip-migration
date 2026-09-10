@@ -19,7 +19,7 @@
     - role: collect_arista
       when: "'arista' in group_names"
 
-- name: Collect from Palo Alto firewalls
+- name: Collect from Palo Alto Panorama
   hosts: paloalto
   gather_facts: false
   vars:

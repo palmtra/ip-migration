@@ -1,0 +1,14 @@
+---
+- name: Collect Panorama running config
+  paloaltonetworks.panos.panos_op:
+    provider: "{{ provider }}"
+    cmd: show config running
+  register: palo_running_config
+  ignore_errors: true
+
+- name: Save running config artifact
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/running_config.json"
+    mode: "0644"
+    content: "{{ palo_running_config | default({}, true) | to_nice_json }}"
+  delegate_to: localhost

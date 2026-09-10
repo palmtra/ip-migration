@@ -16,8 +16,10 @@ interfaces:
   - firewall:
       name: ethernet1/1
       address: 192.0.2.3/29
-      device: fw-panos-01
-      vsys: vsys1
+      device: panorama-01
+      shared: false
+      location: template
+      template: TPL-NETWORK
   - switch:
       name: Vlan100
       address: 192.0.2.1/29
@@ -25,7 +27,20 @@ interfaces:
       vrf: tenant-a
 others:
   - firewall:
-      object: []
+      object:
+        - device: panorama-01
+          name: H-WEB-01
+          matched_value: 192.0.2.10/32
+          field: value
+          shared: true
+          location: shared
+        - device: panorama-01
+          name: N-OLD-USER
+          matched_value: 192.0.2.0/24
+          field: value
+          shared: false
+          location: device_group
+          device_group: DG-SITE-A
       object_groups: []
       nat: []
       gp_portal: []

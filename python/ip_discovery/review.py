@@ -24,19 +24,41 @@ def _vlan_from_name(name: str) -> int | None:
     return None
 
 
+_SCOPE_ROW_KEYS = (
+    "shared",
+    "location",
+    "device_group",
+    "template",
+    "template_stack",
+    "rulebase",
+    "serial",
+    "hostname",
+    "firewall",
+)
+
+
 def _compact_hit(hit: Hit) -> dict[str, Any]:
+    ctx = hit.context or {}
     row = {
         "device": hit.device,
         "name": hit.name,
         "matched_value": hit.matched_value,
         "field": hit.field,
     }
+    if "shared" in ctx and ctx["shared"] is not None:
+        row["shared"] = bool(ctx["shared"])
+    for key in _SCOPE_ROW_KEYS:
+        if key == "shared":
+            continue
+        value = ctx.get(key)
+        if value not in (None, "", [], {}):
+            row[key] = value
     if hit.resolution_path:
         row["via"] = list(hit.resolution_path)
     useful = {
         key: value
-        for key, value in (hit.context or {}).items()
-        if value not in (None, "", [], {})
+        for key, value in ctx.items()
+        if key not in _SCOPE_ROW_KEYS and value not in (None, "", [], {})
     }
     if useful:
         row["context"] = useful
@@ -92,12 +114,20 @@ def _interfaces(hits: list[Hit]) -> list[dict[str, Any]]:
             continue
         seen.add(key)
         body = {
-            "name": hit.name,
-            "address": hit.matched_value,
-            "device": hit.device,
-            "desc": (hit.context or {}).get("description") or (hit.context or {}).get("desc"),
-            "vrf": (hit.context or {}).get("vrf"),
-            "vsys": (hit.context or {}).get("vsys"),
+            key: value
+            for key, value in {
+                "name": hit.name,
+                "address": hit.matched_value,
+                "device": hit.device,
+                "desc": (hit.context or {}).get("description") or (hit.context or {}).get("desc"),
+                "vrf": (hit.context or {}).get("vrf"),
+                "vsys": (hit.context or {}).get("vsys"),
+                "shared": (hit.context or {}).get("shared"),
+                "location": (hit.context or {}).get("location"),
+                "device_group": (hit.context or {}).get("device_group"),
+                "template": (hit.context or {}).get("template") or (hit.context or {}).get("template_stack"),
+            }.items()
+            if value not in (None, "", [], {})
         }
         role = "firewall" if _is_firewall(hit.platform) else "switch"
         rows.append({role: body})

@@ -2,16 +2,23 @@
   {
     "name": "H-WEB-01",
     "address_type": "ip-netmask",
-    "value": "10.50.12.10/32"
+    "value": "10.50.12.10/32",
+    "location": "shared",
+    "shared": true
   },
   {
     "name": "N-OLD-USER",
     "address_type": "ip-netmask",
-    "value": "10.50.12.0/24"
+    "value": "10.50.12.0/24",
+    "location": "device_group",
+    "device_group": "DG-SITE-A",
+    "shared": false
   },
   {
     "name": "H-UNRELATED",
     "address_type": "ip-netmask",
-    "value": "10.9.9.9/32"
+    "value": "10.9.9.9/32",
+    "location": "shared",
+    "shared": true
   }
 ]

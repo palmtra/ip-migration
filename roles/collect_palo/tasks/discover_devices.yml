@@ -1,0 +1,31 @@
+---
+- name: List managed firewalls on Panorama
+  paloaltonetworks.panos.panos_op:
+    provider: "{{ provider }}"
+    cmd: show devices all
+  register: palo_show_devices
+  ignore_errors: true
+
+- name: Save managed-device discovery text
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/devices_raw.txt"
+    mode: "0644"
+    content: "{{ (palo_show_devices.stdout | default('')) ~ '\n' ~ (palo_show_devices.stdout_xml | default('')) }}"
+  delegate_to: localhost
+
+- name: Parse managed firewall serials
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ playbook_dir }}/../python/parse_text.py"
+      - serials
+      - --file
+      - "{{ device_artifact_dir }}/devices_raw.txt"
+  register: palo_devices_parsed
+  delegate_to: localhost
+  changed_when: false
+
+- name: Set firewall serials for operational commands
+  ansible.builtin.set_fact:
+    palo_discovered_devices: "{{ palo_devices_parsed.stdout | default('[]') | from_json }}"
+    palo_serial_list: "{{ palo_serials if (palo_serials | default([]) | length > 0) else ((palo_devices_parsed.stdout | default('[]') | from_json) | map(attribute='serial') | list | unique) }}"

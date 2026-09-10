@@ -77,3 +77,54 @@ def test_group_expansion_hits_rule():
     rule = next(hit for hit in hits if hit.category == "security_rule")
     assert "GRP-WEB" in rule.resolution_path
     assert "H-WEB-01" in rule.resolution_path
+
+
+def test_device_group_object_overrides_shared():
+    records = [
+        Record(
+            device="panorama-01",
+            platform="paloalto.panos",
+            category="address_object",
+            name="H-WEB-01",
+            field="value",
+            values=("10.9.9.9/32",),
+            context={"location": "shared", "shared": True},
+        ),
+        Record(
+            device="panorama-01",
+            platform="paloalto.panos",
+            category="address_object",
+            name="H-WEB-01",
+            field="value",
+            values=("10.50.12.10/32",),
+            context={"location": "device_group", "device_group": "DG-SITE-A", "shared": False},
+        ),
+        Record(
+            device="panorama-01",
+            platform="paloalto.panos",
+            category="security_rule",
+            name="allow-web",
+            field="src/dst",
+            values=(),
+            refs=("H-WEB-01",),
+            context={"location": "device_group", "device_group": "DG-SITE-A", "shared": False},
+        ),
+        Record(
+            device="panorama-01",
+            platform="paloalto.panos",
+            category="security_rule",
+            name="shared-deny",
+            field="src/dst",
+            values=(),
+            refs=("H-WEB-01",),
+            context={"location": "shared", "shared": True},
+        ),
+    ]
+    hits = find_hits(records, ["10.50.12.0/24"])
+    dg_rule = next(hit for hit in hits if hit.name == "allow-web")
+    assert dg_rule.matched_value in {"10.50.12.10", "10.50.12.10/32"}
+    assert not any(hit.name == "shared-deny" for hit in hits)
+    shared_obj = [hit for hit in hits if hit.category == "address_object" and hit.context.get("shared") is True]
+    assert not shared_obj
+    dg_obj = next(hit for hit in hits if hit.category == "address_object" and hit.context.get("shared") is False)
+    assert dg_obj.context.get("device_group") == "DG-SITE-A"

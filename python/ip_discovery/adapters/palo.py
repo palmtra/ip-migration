@@ -12,6 +12,18 @@ from ip_discovery.tokens import extract_tokens_from_text, parse_token
 PALO_ARP_RE = re.compile(
     r"(?P<ip>(?:\d{1,3}\.){3}\d{1,3})\s+(?P<mac>(?:[0-9a-fA-F]{2}[:.-]){5}[0-9a-fA-F]{2})\s+(?P<iface>\S+)"
 )
+_SCOPE_KEYS = (
+    "shared",
+    "location",
+    "device_group",
+    "template",
+    "template_stack",
+    "rulebase",
+    "vsys",
+    "serial",
+    "hostname",
+    "firewall",
+)
 
 
 def _read_json(path: Path) -> Any:
@@ -28,7 +40,7 @@ def _gathered(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, dict):
         if isinstance(payload.get("gathered"), list):
             return [item for item in payload["gathered"] if isinstance(item, dict)]
-        if "name" in payload or "value" in payload:
+        if "name" in payload or "value" in payload or "if_name" in payload:
             return [payload]
     return []
 
@@ -43,11 +55,30 @@ def _op_text(payload: Any) -> str:
     if isinstance(payload, dict):
         if isinstance(payload.get("results"), list):
             return "\n".join(_op_text(item) for item in payload["results"])
-        stdout = payload.get("stdout") or payload.get("msg") or payload.get("xml") or ""
+        stdout = payload.get("stdout") or payload.get("msg") or payload.get("xml") or payload.get("stdout_xml") or ""
         if isinstance(stdout, list):
             return "\n".join(str(item) for item in stdout)
-        return str(stdout)
+        return str(stdout) if stdout else ""
     return str(payload)
+
+
+def _iter_op_results(payload: Any) -> list[tuple[dict[str, Any], str]]:
+    if payload is None:
+        return []
+    if isinstance(payload, dict) and isinstance(payload.get("results"), list) and payload["results"]:
+        sections: list[tuple[dict[str, Any], str]] = []
+        for item in payload["results"]:
+            if not isinstance(item, dict):
+                sections.append(({}, _op_text(item)))
+                continue
+            meta = {
+                key: item[key]
+                for key in _SCOPE_KEYS
+                if item.get(key) not in (None, "", [], {})
+            }
+            sections.append((meta, _op_text(item)))
+        return sections
+    return [({}, _op_text(payload))]
 
 
 def _as_values(*items: Any) -> tuple[str, ...]:
@@ -62,6 +93,29 @@ def _as_values(*items: Any) -> tuple[str, ...]:
     return tuple(value for value in values if value and str(value).lower() != "any")
 
 
+def _clean(context: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in context.items() if value not in (None, "", [], {})}
+
+
+def _scope_context(item: dict[str, Any], extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    location = item.get("location")
+    shared = item.get("shared")
+    if shared is None and location is not None:
+        shared = location == "shared"
+    context: dict[str, Any] = {}
+    if shared is not None:
+        context["shared"] = bool(shared)
+    for key in _SCOPE_KEYS:
+        if key == "shared":
+            continue
+        value = item.get(key)
+        if value not in (None, "", [], {}):
+            context[key] = value
+    if extra:
+        context.update(extra)
+    return _clean(context)
+
+
 def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Record]:
     records: list[Record] = []
 
@@ -70,7 +124,6 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
         value = item.get("value") or item.get("address") or item.get("ip_netmask")
         if not name:
             continue
-        values = _as_values(value)
         records.append(
             Record(
                 device=device,
@@ -78,11 +131,8 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
                 category="address_object",
                 name=name,
                 field="value",
-                values=values,
-                context={
-                    "type": item.get("address_type") or item.get("type"),
-                    "vsys": item.get("vsys"),
-                },
+                values=_as_values(value),
+                context=_scope_context(item, {"type": item.get("address_type") or item.get("type")}),
             )
         )
 
@@ -98,7 +148,7 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
                 field="members",
                 values=(),
                 refs=tuple(str(member) for member in members),
-                context={"description": item.get("description"), "vsys": item.get("vsys")},
+                context=_scope_context(item, {"description": item.get("description")}),
             )
         )
 
@@ -114,12 +164,14 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
                 field="src/dst",
                 values=(),
                 refs=refs,
-                context={
-                    "from": item.get("from_zone") or item.get("from_zones"),
-                    "to": item.get("to_zone") or item.get("to_zones"),
-                    "action": item.get("action"),
-                    "vsys": item.get("vsys"),
-                },
+                context=_scope_context(
+                    item,
+                    {
+                        "from": item.get("from_zone") or item.get("from_zones"),
+                        "to": item.get("to_zone") or item.get("to_zones"),
+                        "action": item.get("action"),
+                    },
+                ),
             )
         )
 
@@ -142,10 +194,13 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
                 field="original/translated",
                 values=(),
                 refs=refs,
-                context={
-                    "nat_type": item.get("nat_type"),
-                    "to_interface": item.get("to_interface"),
-                },
+                context=_scope_context(
+                    item,
+                    {
+                        "nat_type": item.get("nat_type"),
+                        "to_interface": item.get("to_interface"),
+                    },
+                ),
             )
         )
 
@@ -165,7 +220,7 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
                 name=name,
                 field="local/peer",
                 values=values,
-                context={"peer_id": item.get("peer_id_value")},
+                context=_scope_context(item, {"peer_id": item.get("peer_id_value")}),
             )
         )
 
@@ -180,7 +235,7 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
                 name=name,
                 field="endpoints",
                 values=values,
-                context={"ike_gtw_name": item.get("ak_ike_gateway") or item.get("ike_gtw_name")},
+                context=_scope_context(item, {"ike_gtw_name": item.get("ak_ike_gateway") or item.get("ike_gtw_name")}),
             )
         )
 
@@ -195,14 +250,13 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
                 name=name,
                 field="local/remote",
                 values=values,
-                context={"tunnel": item.get("tunnel_name") or item.get("ipsec_tunnel")},
+                context=_scope_context(item, {"tunnel": item.get("tunnel_name") or item.get("ipsec_tunnel")}),
             )
         )
 
     for item in _gathered(_read_json(device_dir / "virtual_routers.json")):
         name = str(item.get("name") or "")
         values = _as_values(item.get("interface") or item.get("interfaces"))
-        # Virtual router membership is names, not IPs; statics are separate.
         if name:
             records.append(
                 Record(
@@ -213,7 +267,7 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
                     field="name",
                     values=(),
                     refs=tuple(str(part) for part in values),
-                    context={"interfaces": item.get("interface") or item.get("interfaces")},
+                    context=_scope_context(item, {"interfaces": item.get("interface") or item.get("interfaces")}),
                 )
             )
 
@@ -233,17 +287,47 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
                 name=name,
                 field="static",
                 values=values,
-                context={
-                    "vr": item.get("vr_name") or item.get("virtual_router"),
-                    "nexthop_type": item.get("nexthop_type"),
-                },
+                context=_scope_context(
+                    item,
+                    {
+                        "vr": item.get("vr_name") or item.get("virtual_router"),
+                        "nexthop_type": item.get("nexthop_type"),
+                    },
+                ),
+            )
+        )
+
+    for item in _gathered(_read_json(device_dir / "interfaces.json")):
+        name = str(item.get("name") or item.get("if_name") or "")
+        values = _as_values(item.get("ip") or item.get("ip_address") or item.get("ipv4"))
+        if not name or not values:
+            continue
+        records.append(
+            Record(
+                device=device,
+                platform=platform,
+                category="interface",
+                name=name,
+                field="address",
+                values=values,
+                context=_scope_context(
+                    item,
+                    {
+                        "comment": item.get("comment") or item.get("description"),
+                        "zone": item.get("zone_name") or item.get("zone"),
+                        "vr": item.get("vr_name"),
+                    },
+                ),
             )
         )
 
     running = _op_text(_read_json(device_dir / "running_config.json"))
     gp_idx = running.lower().find("global-protect")
     gp_text = running[gp_idx : gp_idx + 40000] if gp_idx >= 0 else ""
-    gp_text += "\n" + _op_text(_read_json(device_dir / "op_gp_users.json"))
+    gp_meta: dict[str, Any] = {}
+    for meta, text in _iter_op_results(_read_json(device_dir / "op_gp_users.json")):
+        gp_text += "\n" + text
+        gp_meta.update(meta)
     for token in extract_tokens_from_text(gp_text):
         records.append(
             Record(
@@ -253,103 +337,115 @@ def records_from_palo(device_dir: Path, device: str, platform: str) -> list[Reco
                 name=token.raw,
                 field="config/runtime",
                 values=(token.raw,),
+                context=_scope_context(gp_meta),
             )
         )
 
-    iface_text = _op_text(_read_json(device_dir / "op_interfaces.json"))
-    for token in extract_tokens_from_text(iface_text):
-        records.append(
-            Record(
-                device=device,
-                platform=platform,
-                category="interface",
-                name=token.raw,
-                field="interface",
-                values=(token.raw,),
-            )
-        )
-
-    arp_text = _op_text(_read_json(device_dir / "op_arp.json"))
-    arp_matches = list(PALO_ARP_RE.finditer(arp_text))
-    if arp_matches:
-        for match in arp_matches:
-            ip_addr = match.group("ip")
-            if not parse_token(ip_addr):
-                continue
+    for meta, iface_text in _iter_op_results(_read_json(device_dir / "op_interfaces.json")):
+        for token in extract_tokens_from_text(iface_text):
             records.append(
                 Record(
                     device=device,
                     platform=platform,
-                    category="arp",
-                    name=f"{match.group('iface')}:{ip_addr}",
-                    field="address",
-                    values=(ip_addr,),
-                    context={"mac": match.group("mac"), "interface": match.group("iface")},
-                )
-            )
-    else:
-        for token in extract_tokens_from_text(arp_text):
-            records.append(
-                Record(
-                    device=device,
-                    platform=platform,
-                    category="arp",
+                    category="interface",
                     name=token.raw,
-                    field="arp",
+                    field="interface",
                     values=(token.raw,),
+                    context=_scope_context(meta),
                 )
             )
 
-    for filename in ("op_routes.json", "op_fib.json", "op_route_destination.json"):
-        text = _op_text(_read_json(device_dir / filename))
-        parsed = parse_palo_routes(text)
-        if parsed:
-            for route in parsed:
-                values = route.match_values()
-                if not values:
+    for meta, arp_text in _iter_op_results(_read_json(device_dir / "op_arp.json")):
+        arp_matches = list(PALO_ARP_RE.finditer(arp_text))
+        if arp_matches:
+            for match in arp_matches:
+                ip_addr = match.group("ip")
+                if not parse_token(ip_addr):
                     continue
                 records.append(
                     Record(
                         device=device,
                         platform=platform,
-                        category="route",
-                        name=route.prefix,
-                        field="prefix/nexthop",
-                        values=values,
-                        context={
-                            "protocol": route.protocol,
-                            "next_hop": route.next_hop,
-                            "interface": route.interface,
-                            "vrf": route.vrf,
-                            "flags": route.flags,
-                            "metric": route.metric,
-                            "source": filename,
-                        },
+                        category="arp",
+                        name=f"{match.group('iface')}:{ip_addr}",
+                        field="address",
+                        values=(ip_addr,),
+                        context=_scope_context(
+                            meta,
+                            {"mac": match.group("mac"), "interface": match.group("iface")},
+                        ),
                     )
                 )
-            continue
-        for token in extract_tokens_from_text(text):
+        else:
+            for token in extract_tokens_from_text(arp_text):
+                records.append(
+                    Record(
+                        device=device,
+                        platform=platform,
+                        category="arp",
+                        name=token.raw,
+                        field="arp",
+                        values=(token.raw,),
+                        context=_scope_context(meta),
+                    )
+                )
+
+    for filename in ("op_routes.json", "op_fib.json", "op_route_destination.json"):
+        payload = _read_json(device_dir / filename)
+        for meta, text in _iter_op_results(payload):
+            parsed = parse_palo_routes(text)
+            if parsed:
+                for route in parsed:
+                    values = route.match_values()
+                    if not values:
+                        continue
+                    records.append(
+                        Record(
+                            device=device,
+                            platform=platform,
+                            category="route",
+                            name=route.prefix,
+                            field="prefix/nexthop",
+                            values=values,
+                            context=_scope_context(
+                                meta,
+                                {
+                                    "protocol": route.protocol,
+                                    "next_hop": route.next_hop,
+                                    "interface": route.interface,
+                                    "vrf": route.vrf,
+                                    "flags": route.flags,
+                                    "metric": route.metric,
+                                    "source": filename,
+                                },
+                            ),
+                        )
+                    )
+                continue
+            for token in extract_tokens_from_text(text):
+                records.append(
+                    Record(
+                        device=device,
+                        platform=platform,
+                        category="route",
+                        name=token.raw,
+                        field="route",
+                        values=(token.raw,),
+                        context=_scope_context(meta, {"source": filename}),
+                    )
+                )
+
+    for meta, bgp_text in _iter_op_results(_read_json(device_dir / "op_bgp_peers.json")):
+        for token in extract_tokens_from_text(bgp_text):
             records.append(
                 Record(
                     device=device,
                     platform=platform,
-                    category="route",
+                    category="bgp_neighbor",
                     name=token.raw,
-                    field="route",
+                    field="peer",
                     values=(token.raw,),
-                    context={"source": filename},
+                    context=_scope_context(meta),
                 )
             )
-    bgp_text = _op_text(_read_json(device_dir / "op_bgp_peers.json"))
-    for token in extract_tokens_from_text(bgp_text):
-        records.append(
-            Record(
-                device=device,
-                platform=platform,
-                category="bgp_neighbor",
-                name=token.raw,
-                field="peer",
-                values=(token.raw,),
-            )
-        )
     return records

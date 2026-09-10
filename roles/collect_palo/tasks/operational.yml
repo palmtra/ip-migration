@@ -1,89 +1,101 @@
 ---
+# When palo_serial_item is set, Panorama targets that managed firewall.
+# ARP / FIB / live routes are dataplane data and are not in device-group config.
 - name: Collect interface operational data
   paloaltonetworks.panos.panos_op:
-    provider: "{{ provider }}"
+    provider: "{{ palo_op_provider }}"
     cmd: show interface all
   register: palo_interfaces
+  ignore_errors: true
+  vars:
+    palo_op_provider: "{{ provider | combine({'serial_number': palo_serial_item} if (palo_serial_item | default('')) else {}) }}"
 
 - name: Collect routing table
   paloaltonetworks.panos.panos_op:
-    provider: "{{ provider }}"
+    provider: "{{ palo_op_provider }}"
     cmd: show routing route
   register: palo_routes
+  ignore_errors: true
+  vars:
+    palo_op_provider: "{{ provider | combine({'serial_number': palo_serial_item} if (palo_serial_item | default('')) else {}) }}"
 
 - name: Collect forwarding table
   paloaltonetworks.panos.panos_op:
-    provider: "{{ provider }}"
+    provider: "{{ palo_op_provider }}"
     cmd: show routing fib
   register: palo_fib
   ignore_errors: true
+  vars:
+    palo_op_provider: "{{ provider | combine({'serial_number': palo_serial_item} if (palo_serial_item | default('')) else {}) }}"
 
 - name: Collect routes for each search CIDR
   paloaltonetworks.panos.panos_op:
-    provider: "{{ provider }}"
+    provider: "{{ palo_op_provider }}"
     cmd: "show routing route destination {{ item }}"
   register: palo_route_destination
   loop: "{{ search_targets | default([]) }}"
   ignore_errors: true
+  vars:
+    palo_op_provider: "{{ provider | combine({'serial_number': palo_serial_item} if (palo_serial_item | default('')) else {}) }}"
 
 - name: Collect BGP peers
   paloaltonetworks.panos.panos_op:
-    provider: "{{ provider }}"
+    provider: "{{ palo_op_provider }}"
     cmd: show routing protocol bgp peer
   register: palo_bgp_peers
   ignore_errors: true
+  vars:
+    palo_op_provider: "{{ provider | combine({'serial_number': palo_serial_item} if (palo_serial_item | default('')) else {}) }}"
 
 - name: Collect ARP table
   paloaltonetworks.panos.panos_op:
-    provider: "{{ provider }}"
+    provider: "{{ palo_op_provider }}"
     cmd: show arp all
   register: palo_arp
+  ignore_errors: true
+  vars:
+    palo_op_provider: "{{ provider | combine({'serial_number': palo_serial_item} if (palo_serial_item | default('')) else {}) }}"
 
 - name: Collect GlobalProtect gateway runtime
   paloaltonetworks.panos.panos_op:
-    provider: "{{ provider }}"
+    provider: "{{ palo_op_provider }}"
     cmd: show global-protect-gateway current-user
   register: palo_gp_users
   ignore_errors: true
+  vars:
+    palo_op_provider: "{{ provider | combine({'serial_number': palo_serial_item} if (palo_serial_item | default('')) else {}) }}"
 
 - name: Collect IKE SA state
   paloaltonetworks.panos.panos_op:
-    provider: "{{ provider }}"
+    provider: "{{ palo_op_provider }}"
     cmd: show vpn ike-sa
   register: palo_ike_sa
   ignore_errors: true
+  vars:
+    palo_op_provider: "{{ provider | combine({'serial_number': palo_serial_item} if (palo_serial_item | default('')) else {}) }}"
 
 - name: Collect IPSec SA state
   paloaltonetworks.panos.panos_op:
-    provider: "{{ provider }}"
+    provider: "{{ palo_op_provider }}"
     cmd: show vpn ipsec-sa
   register: palo_ipsec_sa
   ignore_errors: true
+  vars:
+    palo_op_provider: "{{ provider | combine({'serial_number': palo_serial_item} if (palo_serial_item | default('')) else {}) }}"
 
-- name: Save PAN-OS operational artifacts
-  ansible.builtin.copy:
-    dest: "{{ device_artifact_dir }}/{{ item.file }}"
-    mode: "0644"
-    content: "{{ item.content | default({}, true) | to_nice_json }}"
-  loop:
-    - file: op_interfaces.json
-      content: "{{ palo_interfaces | default({}, true) }}"
-    - file: op_routes.json
-      content: "{{ palo_routes | default({}, true) }}"
-    - file: op_fib.json
-      content: "{{ palo_fib | default({}, true) }}"
-    - file: op_route_destination.json
-      content: "{{ palo_route_destination | default({}, true) }}"
-    - file: op_bgp_peers.json
-      content: "{{ palo_bgp_peers | default({}, true) }}"
-    - file: op_arp.json
-      content: "{{ palo_arp | default({}, true) }}"
-    - file: op_gp_users.json
-      content: "{{ palo_gp_users | default({}, true) }}"
-    - file: op_ike_sa.json
-      content: "{{ palo_ike_sa | default({}, true) }}"
-    - file: op_ipsec_sa.json
-      content: "{{ palo_ipsec_sa | default({}, true) }}"
-  loop_control:
-    label: "{{ item.file }}"
-  delegate_to: localhost
+- name: Accumulate operational snapshots
+  ansible.builtin.set_fact:
+    palo_op_interfaces: "{{ palo_op_interfaces + [palo_op_meta | combine({'stdout': palo_interfaces.stdout | default(''), 'stdout_xml': palo_interfaces.stdout_xml | default('')})] }}"
+    palo_op_routes: "{{ palo_op_routes + [palo_op_meta | combine({'stdout': palo_routes.stdout | default(''), 'stdout_xml': palo_routes.stdout_xml | default('')})] }}"
+    palo_op_fib: "{{ palo_op_fib + [palo_op_meta | combine({'stdout': palo_fib.stdout | default(''), 'stdout_xml': palo_fib.stdout_xml | default('')})] }}"
+    palo_op_route_destination: "{{ palo_op_route_destination + [palo_op_meta | combine({'results': palo_route_destination.results | default([])})] }}"
+    palo_op_bgp_peers: "{{ palo_op_bgp_peers + [palo_op_meta | combine({'stdout': palo_bgp_peers.stdout | default(''), 'stdout_xml': palo_bgp_peers.stdout_xml | default('')})] }}"
+    palo_op_arp: "{{ palo_op_arp + [palo_op_meta | combine({'stdout': palo_arp.stdout | default(''), 'stdout_xml': palo_arp.stdout_xml | default('')})] }}"
+    palo_op_gp_users: "{{ palo_op_gp_users + [palo_op_meta | combine({'stdout': palo_gp_users.stdout | default(''), 'stdout_xml': palo_gp_users.stdout_xml | default('')})] }}"
+    palo_op_ike_sa: "{{ palo_op_ike_sa + [palo_op_meta | combine({'stdout': palo_ike_sa.stdout | default(''), 'stdout_xml': palo_ike_sa.stdout_xml | default('')})] }}"
+    palo_op_ipsec_sa: "{{ palo_op_ipsec_sa + [palo_op_meta | combine({'stdout': palo_ipsec_sa.stdout | default(''), 'stdout_xml': palo_ipsec_sa.stdout_xml | default('')})] }}"
+  vars:
+    palo_op_meta:
+      serial: "{{ palo_serial_item | default(None, true) }}"
+      shared: false
+      location: dataplane

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parse VRF or vsys names from CLI/API text (used by Ansible collection)."""
+"""Parse VRF, vsys, or Panorama serials from CLI/API text (used by Ansible collection)."""
 
 from __future__ import annotations
 
@@ -10,17 +10,22 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from ip_discovery.discover import parse_vrf_names, parse_vsys_names
+from ip_discovery.discover import parse_panorama_devices, parse_vrf_names, parse_vsys_names
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("kind", choices=["vrfs", "vsys"])
+    parser.add_argument("kind", choices=["vrfs", "vsys", "serials"])
     parser.add_argument("--file", type=Path)
     args = parser.parse_args()
     text = args.file.read_text(encoding="utf-8") if args.file else sys.stdin.read()
-    names = parse_vrf_names(text) if args.kind == "vrfs" else parse_vsys_names(text)
-    json.dump(names, sys.stdout)
+    if args.kind == "vrfs":
+        payload = parse_vrf_names(text)
+    elif args.kind == "vsys":
+        payload = parse_vsys_names(text)
+    else:
+        payload = parse_panorama_devices(text)
+    json.dump(payload, sys.stdout)
     sys.stdout.write("\n")
     return 0
 

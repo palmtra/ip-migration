@@ -1,0 +1,29 @@
+---
+- name: Gather security rules ({{ palo_location }} {{ palo_device_group_item }} {{ palo_rulebase_item }})
+  paloaltonetworks.panos.panos_security_rule:
+    provider: "{{ provider }}"
+    device_group: "{{ palo_device_group_item }}"
+    rulebase: "{{ palo_rulebase_item }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_security_rules
+  ignore_errors: true
+
+- name: Gather NAT rules ({{ palo_location }} {{ palo_device_group_item }} {{ palo_rulebase_item }})
+  paloaltonetworks.panos.panos_nat_rule2:
+    provider: "{{ provider }}"
+    device_group: "{{ palo_device_group_item }}"
+    rulebase: "{{ palo_rulebase_item }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_nat_rules
+  ignore_errors: true
+
+- name: Accumulate scoped policies
+  ansible.builtin.set_fact:
+    gathered_security_rules: "{{ gathered_security_rules + (rule_items | map('combine', palo_policy_tag) | list) }}"
+    gathered_nat_rules: "{{ gathered_nat_rules + (nat_items | map('combine', palo_policy_tag) | list) }}"
+  vars:
+    palo_policy_tag: "{{ {'location': palo_location, 'shared': palo_location == 'shared', 'rulebase': palo_rulebase_item} | combine({'device_group': palo_device_group_item} if palo_location == 'device_group' else {}) }}"
+    rule_items: "{{ palo_security_rules.gathered | default([]) }}"
+    nat_items: "{{ palo_nat_rules.gathered | default([]) }}"

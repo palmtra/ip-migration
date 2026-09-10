@@ -1,6 +1,9 @@
 [
   {
     "name": "GRP-WEB",
-    "static_value": ["H-WEB-01", "N-OLD-USER"]
+    "static_value": ["H-WEB-01", "N-OLD-USER"],
+    "location": "device_group",
+    "device_group": "DG-SITE-A",
+    "shared": false
   }
 ]

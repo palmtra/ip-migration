@@ -1,13 +1,14 @@
 # IP migration discovery
 
 Read-only discovery. You provide **device inventory**, **search CIDRs**, and
-**credentials**. Ansible logs into each device and the analyzer writes an
-engineer review of every place those CIDRs appear: interfaces, ARP, routes
-(including next hops), BGP advertisements, ACLs, and Palo objects / NAT /
-security / VPN.
+**credentials**. Ansible logs into each switch over SSH and into **Panorama**
+over the XML API. The analyzer writes an engineer review of every place those
+CIDRs appear: interfaces, ARP, routes (including next hops), BGP
+advertisements, ACLs, and Palo objects / NAT / security / VPN.
 
-No per-customer job file is required. VRF names and PAN-OS vsys are discovered
-from the devices.
+No per-customer job file is required. VRF names are discovered from the
+switches. Panorama device groups and templates are taken from inventory;
+each object is marked **shared** or scoped to a device group / template.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for match rules and collectors.
 
@@ -24,6 +25,7 @@ mkdir -p inventories/production/group_vars
 cp inventories/sample/hosts.yml inventories/production/hosts.yml
 cp inventories/sample/group_vars/*.yml inventories/production/group_vars/
 # edit inventories/production/hosts.yml
+# For Panorama: ansible_host is Panorama, plus palo_device_groups and palo_templates
 
 # 2. CIDR to find
 cp vars/search.yml vars/search.local.yml

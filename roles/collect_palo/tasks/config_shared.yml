@@ -39,22 +39,19 @@
   register: palo_ipsec_proxyids
   ignore_errors: true
 
-- name: Save shared PAN-OS config artifacts
-  ansible.builtin.copy:
-    dest: "{{ device_artifact_dir }}/{{ item.file }}"
-    mode: "0644"
-    content: "{{ item.content | default({}, true) | to_nice_json }}"
-  loop:
-    - file: ike_gateways.json
-      content: "{{ palo_ike_gateways.gathered | default(palo_ike_gateways, true) }}"
-    - file: virtual_routers.json
-      content: "{{ palo_virtual_routers.gathered | default(palo_virtual_routers, true) }}"
-    - file: static_routes.json
-      content: "{{ palo_static_routes.gathered | default(palo_static_routes, true) }}"
-    - file: ipsec_tunnels.json
-      content: "{{ palo_ipsec_tunnels.gathered | default(palo_ipsec_tunnels, true) }}"
-    - file: ipsec_proxyids.json
-      content: "{{ palo_ipsec_proxyids.gathered | default(palo_ipsec_proxyids, true) }}"
-  loop_control:
-    label: "{{ item.file }}"
-  delegate_to: localhost
+- name: Accumulate firewall VPN and routing config
+  ansible.builtin.set_fact:
+    gathered_virtual_routers: "{{ gathered_virtual_routers + (vr_items | map('combine', palo_scope_tag) | list) }}"
+    gathered_static_routes: "{{ gathered_static_routes + (route_items | map('combine', palo_scope_tag) | list) }}"
+    gathered_ike_gateways: "{{ gathered_ike_gateways + (ike_items | map('combine', palo_scope_tag) | list) }}"
+    gathered_ipsec_tunnels: "{{ gathered_ipsec_tunnels + (ipsec_items | map('combine', palo_scope_tag) | list) }}"
+    gathered_ipsec_proxyids: "{{ gathered_ipsec_proxyids + (proxy_items | map('combine', palo_scope_tag) | list) }}"
+  vars:
+    palo_scope_tag:
+      location: device
+      shared: false
+    vr_items: "{{ palo_virtual_routers.gathered | default([]) }}"
+    route_items: "{{ palo_static_routes.gathered | default([]) }}"
+    ike_items: "{{ palo_ike_gateways.gathered | default([]) }}"
+    ipsec_items: "{{ palo_ipsec_tunnels.gathered | default([]) }}"
+    proxy_items: "{{ palo_ipsec_proxyids.gathered | default([]) }}"

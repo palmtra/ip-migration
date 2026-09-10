@@ -3,6 +3,8 @@
   "mgmt_ip": "192.0.2.30",
   "platform": "paloalto.panos",
   "vendor": "paloalto",
-  "vsys": "vsys1",
-  "is_panorama": false
+  "role": "panorama",
+  "is_panorama": true,
+  "device_groups": ["DG-SITE-A"],
+  "templates": ["TPL-NETWORK"]
 }

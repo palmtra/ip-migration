@@ -40,6 +40,10 @@ def write_reports(
         "search_term",
         "match_kind",
         "resolution_path",
+        "shared",
+        "location",
+        "device_group",
+        "template",
         "context",
     ]
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
@@ -48,6 +52,10 @@ def write_reports(
         for hit in hits:
             row = hit.as_dict()
             row["resolution_path"] = " > ".join(hit.resolution_path)
+            row["shared"] = hit.context.get("shared")
+            row["location"] = hit.context.get("location")
+            row["device_group"] = hit.context.get("device_group")
+            row["template"] = hit.context.get("template") or hit.context.get("template_stack")
             row["context"] = json.dumps(hit.context, sort_keys=True)
             writer.writerow(row)
 
@@ -111,11 +119,11 @@ def _markdown(hits: list[Hit], search_targets: list[str], labels: dict[str, str]
     arp_hits = [hit for hit in hits if hit.category == "arp"]
     if arp_hits:
         lines.extend(["## ARP in search CIDR", ""])
-        lines.append("| Device | IP | MAC | Interface |")
-        lines.append("| --- | --- | --- | --- |")
+        lines.append("| Device | IP | MAC | Interface | Serial |")
+        lines.append("| --- | --- | --- | --- | --- |")
         for hit in arp_hits:
             lines.append(
-                f"| {hit.device} | `{hit.matched_value}` | {hit.context.get('mac') or ''} | {hit.context.get('interface') or hit.name} |"
+                f"| {hit.device} | `{hit.matched_value}` | {hit.context.get('mac') or ''} | {hit.context.get('interface') or hit.name} | {hit.context.get('serial') or ''} |"
             )
         lines.append("")
 
@@ -146,12 +154,15 @@ def _markdown(hits: list[Hit], search_targets: list[str], labels: dict[str, str]
 
     for device in sorted(by_device):
         lines.extend([f"## {device}", ""])
-        lines.append("| Category | Name | Field | Matched | Search | Kind | Via |")
-        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+        lines.append("| Category | Name | Shared | Location | Field | Matched | Search | Kind | Via |")
+        lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
         for hit in by_device[device]:
             via = " > ".join(hit.resolution_path) if hit.resolution_path else ""
+            shared = hit.context.get("shared")
+            shared_s = "" if shared is None else str(bool(shared)).lower()
+            location = hit.context.get("location") or hit.context.get("device_group") or hit.context.get("template") or ""
             lines.append(
-                f"| {hit.category} | {hit.name} | {hit.field} | `{hit.matched_value}` | `{hit.search_term}` | {hit.match_kind} | {via} |"
+                f"| {hit.category} | {hit.name} | {shared_s} | {location} | {hit.field} | `{hit.matched_value}` | `{hit.search_term}` | {hit.match_kind} | {via} |"
             )
         lines.append("")
     if not hits:

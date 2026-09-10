@@ -1,4 +1,4 @@
-from ip_discovery.discover import parse_vrf_names, parse_vsys_names
+from ip_discovery.discover import parse_panorama_devices, parse_vrf_names, parse_vsys_names
 
 
 def test_parse_ios_vrf_brief():
@@ -29,3 +29,35 @@ def test_parse_vsys_xml_and_fallback():
     assert "tenant-fw" in names
     assert "trust" not in names
     assert parse_vsys_names("") == ["vsys1"]
+
+
+def test_parse_panorama_devices_xml():
+    xml = """
+<response>
+  <result>
+    <devices>
+      <entry name="012345678901">
+        <serial>012345678901</serial>
+        <connected>yes</connected>
+        <hostname>fw-site-a</hostname>
+        <vsys>
+          <entry name="vsys1">
+            <display-name>vsys1</display-name>
+          </entry>
+        </vsys>
+      </entry>
+      <entry name="012345678902">
+        <serial>012345678902</serial>
+        <connected>no</connected>
+        <hostname>fw-offline</hostname>
+      </entry>
+    </devices>
+  </result>
+</response>
+"""
+    devices = parse_panorama_devices(xml)
+    serials = {item["serial"] for item in devices}
+    assert "012345678901" in serials
+    assert "012345678902" not in serials
+    live = next(item for item in devices if item["serial"] == "012345678901")
+    assert live["hostname"] == "fw-site-a"

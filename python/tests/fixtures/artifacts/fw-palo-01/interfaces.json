@@ -1,0 +1,10 @@
+[
+  {
+    "name": "ethernet1/1",
+    "if_name": "ethernet1/1",
+    "ip": ["10.50.12.2/24"],
+    "location": "template",
+    "template": "TPL-NETWORK",
+    "shared": false
+  }
+]

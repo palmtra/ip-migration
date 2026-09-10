@@ -4,6 +4,10 @@
     "source_addresses": ["N-OLD-USER"],
     "destination_addresses": ["any"],
     "source_translation_static_translated_address": "203.0.113.10",
-    "nat_type": "ipv4"
+    "nat_type": "ipv4",
+    "location": "device_group",
+    "device_group": "DG-SITE-A",
+    "rulebase": "pre-rulebase",
+    "shared": false
   }
 ]

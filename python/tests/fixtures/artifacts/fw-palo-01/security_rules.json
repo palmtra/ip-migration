@@ -5,6 +5,10 @@
     "destination_ip": ["any"],
     "from_zone": ["trust"],
     "to_zone": ["untrust"],
-    "action": "allow"
+    "action": "allow",
+    "location": "device_group",
+    "device_group": "DG-SITE-A",
+    "rulebase": "pre-rulebase",
+    "shared": false
   }
 ]

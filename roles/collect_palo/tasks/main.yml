@@ -10,31 +10,116 @@
       mgmt_ip: "{{ ansible_host | default(inventory_hostname) }}"
       platform: paloalto.panos
       vendor: paloalto
-      role: firewall
-      is_panorama: "{{ palo_is_panorama }}"
+      role: "{{ 'panorama' if (palo_is_panorama | bool) else 'firewall' }}"
+      is_panorama: "{{ palo_is_panorama | bool }}"
+      device_groups: "{{ palo_device_groups | default([]) }}"
+      templates: "{{ palo_templates | default([]) }}"
+      template_stacks: "{{ palo_template_stacks | default([]) }}"
   delegate_to: localhost
 
-- name: Discover virtual systems
-  ansible.builtin.include_tasks: discover_vsys.yml
-
-- name: Collect PAN-OS operational state
-  ansible.builtin.include_tasks: operational.yml
-
-- name: Initialize gathered config lists
+- name: Initialize gathered config and operational lists
   ansible.builtin.set_fact:
     gathered_addresses: []
     gathered_address_groups: []
     gathered_security_rules: []
     gathered_nat_rules: []
+    gathered_ike_gateways: []
+    gathered_virtual_routers: []
+    gathered_static_routes: []
+    gathered_ipsec_tunnels: []
+    gathered_ipsec_proxyids: []
+    gathered_interfaces: []
+    palo_op_interfaces: []
+    palo_op_routes: []
+    palo_op_fib: []
+    palo_op_route_destination: []
+    palo_op_bgp_peers: []
+    palo_op_arp: []
+    palo_op_gp_users: []
+    palo_op_ike_sa: []
+    palo_op_ipsec_sa: []
+    palo_serial_list: "{{ palo_serials | default([]) }}"
 
-- name: Gather policy objects for each vsys
-  ansible.builtin.include_tasks: config_vsys.yml
-  loop: "{{ palo_vsys_list }}"
-  loop_control:
-    loop_var: palo_vsys_item
+- name: Collect from Panorama
+  when: palo_is_panorama | bool
+  block:
+    - name: Require device groups or templates
+      ansible.builtin.assert:
+        that:
+          - (palo_device_groups | default([]) | length > 0)
+            or (palo_templates | default([]) | length > 0)
+            or (palo_template_stacks | default([]) | length > 0)
+        fail_msg: >-
+          Panorama inventory host {{ inventory_hostname }} needs palo_device_groups
+          and palo_templates (and/or palo_template_stacks). Discovery talks to
+          Panorama, not to firewalls directly.
 
-- name: Gather shared VPN and routing config
-  ansible.builtin.include_tasks: config_shared.yml
+    - name: Collect Panorama running config
+      ansible.builtin.include_tasks: collect_running.yml
+
+    - name: Discover managed firewall serials
+      ansible.builtin.include_tasks: discover_devices.yml
+
+    - name: Gather shared objects and policies
+      ansible.builtin.include_tasks: config_scope.yml
+      vars:
+        palo_location: shared
+        palo_device_group_item: shared
+        palo_rulebases: "{{ palo_panorama_rulebases }}"
+
+    - name: Gather objects and policies for each device group
+      ansible.builtin.include_tasks: config_scope.yml
+      loop: "{{ palo_device_groups | default([]) }}"
+      loop_control:
+        loop_var: palo_device_group_item
+      vars:
+        palo_location: device_group
+        palo_rulebases: "{{ palo_panorama_rulebases }}"
+
+    - name: Gather network and VPN config from each template
+      ansible.builtin.include_tasks: config_template.yml
+      loop: "{{ palo_templates | default([]) }}"
+      loop_control:
+        loop_var: palo_template_item
+      vars:
+        palo_location: template
+        palo_template_name: "{{ palo_template_item }}"
+        palo_template_stack_name: ""
+
+    - name: Gather network and VPN config from each template stack
+      ansible.builtin.include_tasks: config_template.yml
+      loop: "{{ palo_template_stacks | default([]) }}"
+      loop_control:
+        loop_var: palo_template_stack_item
+      vars:
+        palo_location: template_stack
+        palo_template_name: ""
+        palo_template_stack_name: "{{ palo_template_stack_item }}"
+
+    - name: Collect operational state from managed firewalls via Panorama
+      ansible.builtin.include_tasks: operational.yml
+      loop: "{{ palo_serial_list }}"
+      loop_control:
+        loop_var: palo_serial_item
+      when: palo_serial_list | length > 0
+
+- name: Collect from standalone firewall
+  when: not (palo_is_panorama | bool)
+  block:
+    - name: Discover virtual systems
+      ansible.builtin.include_tasks: discover_vsys.yml
+
+    - name: Collect PAN-OS operational state
+      ansible.builtin.include_tasks: operational.yml
+
+    - name: Gather policy objects for each vsys
+      ansible.builtin.include_tasks: config_vsys.yml
+      loop: "{{ palo_vsys_list }}"
+      loop_control:
+        loop_var: palo_vsys_item
+
+    - name: Gather VPN and routing config
+      ansible.builtin.include_tasks: config_shared.yml
 
 - name: Save PAN-OS config artifacts
   ansible.builtin.copy:
@@ -50,6 +135,46 @@
       content: "{{ gathered_security_rules }}"
     - file: nat_rules.json
       content: "{{ gathered_nat_rules }}"
+    - file: ike_gateways.json
+      content: "{{ gathered_ike_gateways }}"
+    - file: virtual_routers.json
+      content: "{{ gathered_virtual_routers }}"
+    - file: static_routes.json
+      content: "{{ gathered_static_routes }}"
+    - file: ipsec_tunnels.json
+      content: "{{ gathered_ipsec_tunnels }}"
+    - file: ipsec_proxyids.json
+      content: "{{ gathered_ipsec_proxyids }}"
+    - file: interfaces.json
+      content: "{{ gathered_interfaces }}"
+  loop_control:
+    label: "{{ item.file }}"
+  delegate_to: localhost
+
+- name: Save PAN-OS operational artifacts
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/{{ item.file }}"
+    mode: "0644"
+    content: "{{ {'results': item.content | default([])} | to_nice_json }}"
+  loop:
+    - file: op_interfaces.json
+      content: "{{ palo_op_interfaces }}"
+    - file: op_routes.json
+      content: "{{ palo_op_routes }}"
+    - file: op_fib.json
+      content: "{{ palo_op_fib }}"
+    - file: op_route_destination.json
+      content: "{{ palo_op_route_destination }}"
+    - file: op_bgp_peers.json
+      content: "{{ palo_op_bgp_peers }}"
+    - file: op_arp.json
+      content: "{{ palo_op_arp }}"
+    - file: op_gp_users.json
+      content: "{{ palo_op_gp_users }}"
+    - file: op_ike_sa.json
+      content: "{{ palo_op_ike_sa }}"
+    - file: op_ipsec_sa.json
+      content: "{{ palo_op_ipsec_sa }}"
   loop_control:
     label: "{{ item.file }}"
   delegate_to: localhost

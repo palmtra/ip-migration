@@ -1,0 +1,118 @@
+---
+# Network and VPN objects live in Panorama templates / template stacks, not device groups.
+- name: Gather virtual routers ({{ palo_location }} {{ palo_template_name | default(palo_template_stack_name) }})
+  paloaltonetworks.panos.panos_virtual_router:
+    provider: "{{ provider }}"
+    template: "{{ palo_template_name | default(omit, true) }}"
+    template_stack: "{{ palo_template_stack_name | default(omit, true) }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_virtual_routers
+  ignore_errors: true
+
+- name: Gather ethernet interfaces
+  paloaltonetworks.panos.panos_interface:
+    provider: "{{ provider }}"
+    template: "{{ palo_template_name | default(omit, true) }}"
+    template_stack: "{{ palo_template_stack_name | default(omit, true) }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_ethernet_ifaces
+  ignore_errors: true
+
+- name: Gather layer3 subinterfaces
+  paloaltonetworks.panos.panos_l3_subinterface:
+    provider: "{{ provider }}"
+    template: "{{ palo_template_name | default(omit, true) }}"
+    template_stack: "{{ palo_template_stack_name | default(omit, true) }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_l3_subifaces
+  ignore_errors: true
+
+- name: Gather loopback interfaces
+  paloaltonetworks.panos.panos_loopback_interface:
+    provider: "{{ provider }}"
+    template: "{{ palo_template_name | default(omit, true) }}"
+    template_stack: "{{ palo_template_stack_name | default(omit, true) }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_loopbacks
+  ignore_errors: true
+
+- name: Gather tunnel interfaces
+  paloaltonetworks.panos.panos_tunnel:
+    provider: "{{ provider }}"
+    template: "{{ palo_template_name | default(omit, true) }}"
+    template_stack: "{{ palo_template_stack_name | default(omit, true) }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_tunnels
+  ignore_errors: true
+
+- name: Gather IKE gateways
+  paloaltonetworks.panos.panos_ike_gateway:
+    provider: "{{ provider }}"
+    template: "{{ palo_template_name | default(omit, true) }}"
+    template_stack: "{{ palo_template_stack_name | default(omit, true) }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_ike_gateways
+  ignore_errors: true
+
+- name: Gather IPSec tunnels
+  paloaltonetworks.panos.panos_ipsec_tunnel:
+    provider: "{{ provider }}"
+    template: "{{ palo_template_name | default(omit, true) }}"
+    template_stack: "{{ palo_template_stack_name | default(omit, true) }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_ipsec_tunnels
+  ignore_errors: true
+
+- name: Gather IPSec IPv4 proxy IDs
+  paloaltonetworks.panos.panos_ipsec_ipv4_proxyid:
+    provider: "{{ provider }}"
+    template: "{{ palo_template_name | default(omit, true) }}"
+    template_stack: "{{ palo_template_stack_name | default(omit, true) }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_ipsec_proxyids
+  ignore_errors: true
+
+- name: Accumulate template network and VPN objects
+  ansible.builtin.set_fact:
+    gathered_virtual_routers: "{{ gathered_virtual_routers + (vr_items | map('combine', palo_scope_tag) | list) }}"
+    gathered_interfaces: "{{ gathered_interfaces + (iface_items | map('combine', palo_scope_tag) | list) }}"
+    gathered_ike_gateways: "{{ gathered_ike_gateways + (ike_items | map('combine', palo_scope_tag) | list) }}"
+    gathered_ipsec_tunnels: "{{ gathered_ipsec_tunnels + (ipsec_items | map('combine', palo_scope_tag) | list) }}"
+    gathered_ipsec_proxyids: "{{ gathered_ipsec_proxyids + (proxy_items | map('combine', palo_scope_tag) | list) }}"
+    palo_vr_names: "{{ (vr_items | map(attribute='name') | list | unique) or ['default'] }}"
+  vars:
+    palo_scope_tag: "{{ {'location': palo_location, 'shared': false} | combine({'template': palo_template_name} if palo_template_name | default('') else {}) | combine({'template_stack': palo_template_stack_name} if palo_template_stack_name | default('') else {}) }}"
+    vr_items: "{{ palo_virtual_routers.gathered | default([]) }}"
+    iface_items: "{{ (palo_ethernet_ifaces.gathered | default([])) + (palo_l3_subifaces.gathered | default([])) + (palo_loopbacks.gathered | default([])) + (palo_tunnels.gathered | default([])) }}"
+    ike_items: "{{ palo_ike_gateways.gathered | default([]) }}"
+    ipsec_items: "{{ palo_ipsec_tunnels.gathered | default([]) }}"
+    proxy_items: "{{ palo_ipsec_proxyids.gathered | default([]) }}"
+
+- name: Gather static routes per virtual router
+  paloaltonetworks.panos.panos_static_route:
+    provider: "{{ provider }}"
+    template: "{{ palo_template_name | default(omit, true) }}"
+    template_stack: "{{ palo_template_stack_name | default(omit, true) }}"
+    virtual_router: "{{ palo_vr_item }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_static_routes
+  loop: "{{ palo_vr_names }}"
+  loop_control:
+    loop_var: palo_vr_item
+  ignore_errors: true
+
+- name: Accumulate template static routes
+  ansible.builtin.set_fact:
+    gathered_static_routes: "{{ gathered_static_routes + (item.gathered | default([]) | map('combine', palo_scope_tag | combine({'vr_name': item.item})) | list) }}"
+  loop: "{{ palo_static_routes.results | default([]) }}"
+  vars:
+    palo_scope_tag: "{{ {'location': palo_location, 'shared': false} | combine({'template': palo_template_name} if palo_template_name | default('') else {}) | combine({'template_stack': palo_template_stack_name} if palo_template_stack_name | default('') else {}) }}"

@@ -6,11 +6,11 @@ Discovery is **read-only**. Inputs are:
 2. One or more search CIDRs (`vars/search.yml` or a local copy).
 3. Credentials via environment variables.
 
-Everything else is pulled from the devices: VRFs, vsys, interface IPs, ARP,
-routes (prefix and next hop), BGP network statements, ACLs, and Palo objects /
-NAT / security / GlobalProtect / IPSec. The engineer report is the starting
-point for an IP swap review. Swap playbooks are out of scope until discovery
-is trusted.
+Everything else is pulled from the devices: VRFs, interface IPs, ARP,
+routes (prefix and next hop), BGP network statements, ACLs, and Panorama
+objects / NAT / security / GlobalProtect / IPSec. The engineer report is
+the starting point for an IP swap review. Swap playbooks are out of scope
+until discovery is trusted.
 
 ## Why Ansible
 
@@ -21,11 +21,12 @@ CIDR overlap, and a cross-device report is done in `python/ip_discovery`.
 ## Pipeline
 
 1. Engineer lists devices in inventory and CIDRs in the search file.
+   Panorama needs device groups and templates on the Panorama host.
 2. `playbooks/collect.yml` connects read-only and writes `artifacts/<hostname>/`.
-   IOS VRF names and PAN-OS vsys names are discovered on the device, then
-   route/ARP/object collection is run for each.
+   IOS VRF names are discovered on the device. Panorama objects are gathered
+   from **shared**, each listed **device group**, and each listed **template**.
 3. `python/analyze_hits.py` matches the search CIDRs, including ARP entries
-   and route next hops.
+   and route next hops, and records whether a Palo object is shared.
 4. `reports/migration-review.yml` plus Markdown/CSV/JSON.
 
 ## What is collected
@@ -47,26 +48,46 @@ IOS VRF list is parsed from `show vrf brief` / `show ip vrf`, then
 `show ip route vrf <name>` and `show ip arp vrf <name>` run for each VRF.
 NX-OS and EOS use `vrf all`.
 
-### Palo Alto PAN-OS
+### Palo Alto via Panorama
 
-Auth: service account on the XML API. XML API + operational requests, no
-commit rights.
+Auth: service account on the Panorama XML API. XML API + operational
+requests, no commit rights. Discovery talks to **Panorama**, not to
+firewalls directly.
 
-Vsys names are discovered (`show vsys` + running config), then objects,
-groups, security rules, and NAT are gathered for **each** vsys.
+Inventory on the Panorama host:
+
+| Variable | Purpose |
+| --- | --- |
+| `palo_device_groups` | Device groups whose objects, groups, security, and NAT to gather |
+| `palo_templates` | Templates for interfaces, VR, statics, IKE, IPSec |
+| `palo_template_stacks` | Optional stacks (same network objects) |
+| `palo_serials` | Optional firewall serials for ARP/FIB/live routes via Panorama targeting |
+
+If `palo_serials` is empty, serials are taken from `show devices all`.
+
+Each gathered object is tagged with:
+
+- `shared: true` when it lives in Panorama **Shared**
+- `shared: false` plus `device_group`, `template`, or `template_stack`
+
+Device-group objects override shared objects of the same name when expanding
+groups and policies. Pre-rulebase and post-rulebase are both collected.
 
 | Source | Swap relevance |
 | --- | --- |
-| Interfaces | L3 IPs, tunnels, loopbacks |
-| Routes / FIB / statics / VR | Next hops and prefixes in the old block |
-| ARP | Hosts behind the firewall |
-| Address objects / groups | Direct IP/CIDR/range plus nested members |
-| Security rules | ACL equivalent |
-| NAT | Original and translated addresses |
-| IKE / IPSec / proxy IDs | Peers and selectors |
+| Template interfaces | L3 IPs, tunnels, loopbacks |
+| Template routes / VR / statics | Next hops and prefixes in the old block |
+| ARP via Panorama serial targeting | Hosts behind the firewall |
+| Shared + DG address objects / groups | Direct IP/CIDR/range plus nested members |
+| Shared + DG security rules | ACL equivalent (pre and post) |
+| Shared + DG NAT | Original and translated addresses |
+| Template IKE / IPSec / proxy IDs | Peers and selectors |
 | GlobalProtect | Portal/gateway IPs and pools |
 
 `any` is not a hit.
+
+Standalone firewall collection (`palo_is_panorama: false`) remains as a
+fallback and still walks vsys.
 
 ## Match rules
 
@@ -79,7 +100,8 @@ the prefix is `0.0.0.0/0`.
 ARP entries are matched the same way: any learned host whose IP is in the
 CIDR is reported with MAC and interface.
 
-Address groups are expanded recursively.
+Address groups are expanded recursively. A name defined in a device group
+wins over the same name in Shared.
 
 ## Inventory and credentials
 
@@ -92,7 +114,8 @@ export PALO_PASSWORD='...'
 
 Put real management IPs in `inventories/production/` (gitignored). Do not
 commit customer CIDRs, hostnames, or credentials. The sample inventory uses
-RFC 5737 documentation addresses only.
+RFC 5737 documentation addresses and placeholder device-group / template
+names only.
 
 Cisco/Arista and Palo must use different accounts.
 
@@ -100,4 +123,5 @@ Cisco/Arista and Palo must use different accounts.
 
 `reports/migration-review.yml` is the engineer template: interfaces, VLANs,
 firewall objects/NAT/policy/VPN, switch BGP advertisements, ARP, and routes.
+Each Palo hit includes `shared` and `location` / `device_group` / `template`.
 Markdown adds ARP and routing tables for review.

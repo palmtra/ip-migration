@@ -1,0 +1,36 @@
+---
+# Gather objects from Panorama shared or a device group.
+# palo_location: shared | device_group
+# palo_device_group_item: shared | <device-group name>
+- name: Gather address objects ({{ palo_location }} {{ palo_device_group_item }})
+  paloaltonetworks.panos.panos_address_object:
+    provider: "{{ provider }}"
+    device_group: "{{ palo_device_group_item }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_addresses
+  ignore_errors: true
+
+- name: Gather address groups ({{ palo_location }} {{ palo_device_group_item }})
+  paloaltonetworks.panos.panos_address_group:
+    provider: "{{ provider }}"
+    device_group: "{{ palo_device_group_item }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_address_groups
+  ignore_errors: true
+
+- name: Accumulate scoped objects
+  ansible.builtin.set_fact:
+    gathered_addresses: "{{ gathered_addresses + (address_items | map('combine', palo_scope_tag) | list) }}"
+    gathered_address_groups: "{{ gathered_address_groups + (group_items | map('combine', palo_scope_tag) | list) }}"
+  vars:
+    palo_scope_tag: "{{ {'location': palo_location, 'shared': palo_location == 'shared'} | combine({'device_group': palo_device_group_item} if palo_location == 'device_group' else {}) }}"
+    address_items: "{{ palo_addresses.gathered | default([]) }}"
+    group_items: "{{ palo_address_groups.gathered | default([]) }}"
+
+- name: Gather security and NAT rulebases ({{ palo_location }} {{ palo_device_group_item }})
+  ansible.builtin.include_tasks: config_policies.yml
+  loop: "{{ palo_rulebases }}"
+  loop_control:
+    loop_var: palo_rulebase_item

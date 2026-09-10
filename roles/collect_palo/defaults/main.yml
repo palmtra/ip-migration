@@ -1,0 +1,9 @@
+---
+palo_is_panorama: true
+palo_device_groups: []
+palo_templates: []
+palo_template_stacks: []
+palo_serials: []
+palo_panorama_rulebases:
+  - pre-rulebase
+  - post-rulebase

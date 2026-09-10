@@ -1,13 +1,15 @@
 ---
-# PAN-OS modules run on the control node and call the XML API.
+# PAN-OS modules run on the control node and call the XML API on Panorama.
 ansible_connection: local
 ansible_python_interpreter: "{{ ansible_playbook_python }}"
-palo_vsys: vsys1
-palo_is_panorama: false
+palo_is_panorama: true
+palo_device_groups: []
+palo_templates: []
+palo_template_stacks: []
+palo_serials: []
 provider:
   ip_address: "{{ ansible_host | default(inventory_hostname) }}"
   username: "{{ palo_username }}"
   password: "{{ palo_password }}"
   api_key: "{{ palo_api_key | default(omit, true) }}"
   port: "{{ palo_port }}"
-  serial_number: "{{ palo_serial | default(omit) }}"

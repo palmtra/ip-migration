@@ -39,11 +39,15 @@
 
 - name: Accumulate vsys objects
   ansible.builtin.set_fact:
-    gathered_addresses: "{{ gathered_addresses + (address_items | map('combine', {'vsys': palo_vsys_item}) | list) }}"
-    gathered_address_groups: "{{ gathered_address_groups + (group_items | map('combine', {'vsys': palo_vsys_item}) | list) }}"
-    gathered_security_rules: "{{ gathered_security_rules + (rule_items | map('combine', {'vsys': palo_vsys_item}) | list) }}"
-    gathered_nat_rules: "{{ gathered_nat_rules + (nat_items | map('combine', {'vsys': palo_vsys_item}) | list) }}"
+    gathered_addresses: "{{ gathered_addresses + (address_items | map('combine', palo_scope_tag) | list) }}"
+    gathered_address_groups: "{{ gathered_address_groups + (group_items | map('combine', palo_scope_tag) | list) }}"
+    gathered_security_rules: "{{ gathered_security_rules + (rule_items | map('combine', palo_scope_tag) | list) }}"
+    gathered_nat_rules: "{{ gathered_nat_rules + (nat_items | map('combine', palo_scope_tag) | list) }}"
   vars:
+    palo_scope_tag:
+      location: vsys
+      shared: false
+      vsys: "{{ palo_vsys_item }}"
     address_items: "{{ palo_addresses.gathered | default([]) }}"
     group_items: "{{ palo_address_groups.gathered | default([]) }}"
     rule_items: "{{ palo_security_rules.gathered | default([]) }}"
