@@ -274,6 +274,7 @@ Transit links, MLAG keepalives, and loopbacks **outside** the search CIDR are om
 | Search file not found | Filename is `vars/search/<id>-<site>-<customer>.yml` and `-e search_job=` matches the stem |
 | Panorama play fails / no API access yet | Omit `panorama` from `-l`, or use `-l '!panorama'`. `skipping: no hosts matched` is OK |
 | Assert on `palo_device_groups` | The Panorama play ran with empty groups in the customer file; skip `panorama` until you have them |
+| EOS/NX-OS `command timeout triggered` | Large RIB/BGP/running-config on PEs. Commands are batched; default wait is 600s. Raise `eos_command_timeout` or `nxos_command_timeout` in group_vars if it still times out. Re-run the failed hosts with `-l`. |
 | Enable password required | Set become on that host/group (default is off) |
 
 ## 9. What this does *not* do

@@ -21,24 +21,73 @@
       - interfaces
       - hardware
 
-- name: Run EOS discovery commands as JSON
+# One eos_command with every show plus running-config exceeds command_timeout
+# on PEs (full BGP/RIB JSON). Batches get their own timeout; a slow batch
+# does not discard interface/ARP output.
+- name: Run EOS discovery command batches
   arista.eos.eos_command:
-    commands:
-      - show ip interface brief | json
-      - show ipv6 interface brief | json
-      - show ip arp vrf all | json
-      - show ipv6 neighbor | json
-      - show ip route vrf all | json
-      - show ipv6 route vrf all | json
-      - show ip bgp summary vrf all | json
-      - show ip bgp vrf all | json
-      - show ip virtual-router | json
-      - show mlag | json
-      - show vrf | json
-      - show vlan | json
-      - show ip access-lists | json
-      - show running-config
-  register: eos_show
+    commands: "{{ item.commands }}"
+  vars:
+    ansible_command_timeout: "{{ eos_command_timeout | default(600) }}"
+  loop:
+    - name: interfaces
+      commands:
+        - show ip interface brief | json
+        - show ipv6 interface brief | json
+        - show ip virtual-router | json
+        - show mlag | json
+        - show vrf | json
+        - show vlan | json
+    - name: forwarding
+      commands:
+        - show ip arp vrf all | json
+        - show ipv6 neighbor | json
+        - show ip access-lists | json
+    - name: routing
+      commands:
+        - show ip route vrf all | json
+        - show ipv6 route vrf all | json
+        - show ip bgp summary vrf all | json
+        - show ip bgp vrf all | json
+    - name: running-config
+      commands:
+        - show running-config
+  loop_control:
+    label: "{{ item.name }}"
+  register: eos_show_batches
+  ignore_errors: true
+
+- name: Merge EOS command batches
+  ansible.builtin.set_fact:
+    eos_show:
+      commands: "{{ eos_merged_commands }}"
+      stdout: "{{ eos_merged_stdout }}"
+      invocation:
+        module_args:
+          commands: "{{ eos_merged_commands }}"
+  vars:
+    eos_ok_batches: "{{ eos_show_batches.results | selectattr('failed', 'equalto', false) | list }}"
+    eos_merged_commands: "{{ eos_ok_batches | map(attribute='item.commands') | flatten }}"
+    eos_merged_stdout: "{{ eos_ok_batches | map(attribute='stdout') | flatten }}"
+
+- name: Warn on EOS batches that timed out
+  ansible.builtin.debug:
+    msg: >-
+      EOS batch '{{ item.item.name }}' failed on {{ inventory_hostname }}
+      ({{ item.msg | default('timeout or error') }}). Other batches were saved.
+  loop: "{{ eos_show_batches.results | selectattr('failed', 'equalto', true) | list }}"
+  loop_control:
+    label: "{{ item.item.name | default('batch') }}"
+  when: eos_show_batches.results | selectattr('failed', 'equalto', true) | list | length > 0
+
+- name: Require some EOS command output
+  ansible.builtin.assert:
+    that:
+      - (eos_show.stdout | default([]) | length) > 0
+    fail_msg: >-
+      All EOS discovery command batches failed on {{ inventory_hostname }}.
+      Increase eos_command_timeout (default 600) in group_vars/eos_devices.yml
+      if you still see command timeout triggered.
 
 - name: Save EOS command output
   ansible.builtin.copy:

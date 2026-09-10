@@ -4,3 +4,5 @@ ansible_network_os: arista.eos.eos
 ansible_user: "{{ network_username }}"
 ansible_password: "{{ network_password }}"
 ansible_become: false
+ansible_command_timeout: "{{ eos_command_timeout | default(600) }}"
+eos_command_timeout: 600

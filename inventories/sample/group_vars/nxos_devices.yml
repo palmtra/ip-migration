@@ -5,3 +5,5 @@ ansible_user: "{{ network_username }}"
 ansible_password: "{{ network_password }}"
 ansible_become: false
 ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+ansible_command_timeout: "{{ nxos_command_timeout | default(600) }}"
+nxos_command_timeout: 600
