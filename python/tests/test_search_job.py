@@ -48,3 +48,37 @@ def test_new_search_writes_customer_file(tmp_path: Path):
     assert data["customer"] == "Example Retail"
     assert data["id"] == "INC-1042"
     assert data["site"] == "DC1"
+    assert data["palo_device_groups"] == []
+    assert data["palo_templates"] == []
+    assert data["palo_template_stacks"] == []
+    assert data["palo_serials"] == []
+
+
+def test_new_search_writes_panorama_scope(tmp_path: Path):
+    script = Path(__file__).resolve().parents[1] / "new_search.py"
+    subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--id",
+            "INC-1042",
+            "--site",
+            "DC1",
+            "--customer",
+            "Example Retail",
+            "--cidr",
+            "10.200.100.0/24",
+            "--device-group",
+            "DG-DC1-PROD",
+            "--template",
+            "TPL-DC1-NETWORK",
+            "--dir",
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    data = yaml.safe_load((tmp_path / "INC-1042-DC1-Example-Retail.yml").read_text(encoding="utf-8"))
+    assert data["palo_device_groups"] == ["DG-DC1-PROD"]
+    assert data["palo_templates"] == ["TPL-DC1-NETWORK"]

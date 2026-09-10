@@ -23,12 +23,14 @@ mkdir -p inventories/production/group_vars
 cp inventories/sample/hosts.yml inventories/production/hosts.yml
 cp inventories/sample/group_vars/*.yml inventories/production/group_vars/
 # edit inventories/production/hosts.yml
-# For Panorama: ansible_host is Panorama, plus palo_device_groups and palo_templates
+# Connection / OS: inventories/production/group_vars/
+# Panorama: hostname + IP only. Device groups and templates go in the search file.
 
 # 2. One search file per customer: <id>-<site>-<customer>.yml
 python3 python/new_search.py \
   --id INC-1042 --site DC1 --customer "Example Retail" \
-  --cidr 10.200.100.0/24
+  --cidr 10.200.100.0/24 \
+  --device-group DG-DC1-PROD --template TPL-DC1-NETWORK
 
 export NETWORK_USERNAME='...'
 export NETWORK_PASSWORD='...'

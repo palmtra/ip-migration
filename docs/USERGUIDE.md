@@ -8,22 +8,22 @@ Match rules and collector internals are in [DESIGN.md](DESIGN.md).
 
 | You have | Where it goes |
 | --- | --- |
-| Customer name, ID, data centre, IP block | One file: `vars/search/<id>-<site>-<customer>.yml` |
-| Each target device hostname + management IP + OS | `inventories/production/hosts.yml` |
-| Panorama management IP | same inventory, `paloalto` group |
-| Panorama **device group(s)** | `palo_device_groups` on the Panorama host |
-| Panorama **template(s)** | `palo_templates` (and stacks if you use them) |
+| Customer name, ID, site, IP block, Panorama device groups/templates | One file: `vars/search/<id>-<site>-<customer>.yml` |
+| Each switch/PE hostname + management IP + data centre | `inventories/production/hosts.yml` under `network_devices` |
+| Panorama / CloudVision management address | same inventory, `panorama` and `CVAAS` (hostname + IP only) |
+| SSH / API connection, `ansible_network_os` | `inventories/production/group_vars/` |
 
 OS values the inventory understands:
 
-| Device OS | Inventory group | Host variable |
+| Device OS | Inventory group | Connection vars |
 | --- | --- | --- |
-| Cisco IOS / IOS-XE | `cisco` | `ansible_network_os: cisco.ios.ios` (group default) |
-| Cisco NX-OS | `cisco` | `ansible_network_os: cisco.nxos.nxos` |
-| Arista EOS | `arista` | `ansible_network_os: arista.eos.eos` |
-| Palo Alto (Panorama-managed) | `paloalto` | `palo_is_panorama: true` — do **not** SSH the firewalls |
+| Cisco IOS / IOS-XE | `ios_devices` | `group_vars/ios_devices.yml` |
+| Cisco NX-OS | `nxos_devices` | `group_vars/nxos_devices.yml` |
+| Arista EOS | `eos_devices` | `group_vars/eos_devices.yml` |
+| Palo Alto (Panorama) | `panorama` | `group_vars/panorama.yml` — API connection only; do **not** SSH firewalls |
+| Arista CloudVision | `CVAAS` | inventory only; discovery does not log into CVP |
 
-Only list devices that should be searched. Discovery does not crawl the rest of the estate.
+Inventory can hold the whole estate. Limit a run with `-l dc_dc1` (or hostnames). Per-customer Panorama scope is selected by `search_job`, not by editing hosts.yml.
 
 ## 2. Critical extras (easy to miss)
 
@@ -33,8 +33,8 @@ These are required in practice even if they were not on the intake form:
 2. **Two accounts**, not one:
    - `NETWORK_USERNAME` / `NETWORK_PASSWORD` — SSH to Cisco and Arista (`network_cli`).
    - `PALO_USERNAME` / `PALO_PASSWORD` (or `PALO_API_KEY`) — Panorama XML API. Use a service account with **no commit** rights.
-3. **Every device group that can hold the objects**, including child groups. A parent group does not pull child-group objects.
-4. **Templates for network/VPN** (interfaces, VARP-equivalent is on switches; on Palo: VR, statics, IKE, IPSec). Policy lives in device groups; interfaces/IKE live in templates. If you use **template stacks**, set `palo_template_stacks` as well.
+3. **Every device group that can hold the objects**, including child groups, in the **customer search file**. A parent group does not pull child-group objects.
+4. **Templates for network/VPN** in that same search file (interfaces, VR, statics, IKE, IPSec). Policy lives in device groups; interfaces/IKE live in templates. If you use **template stacks**, set `palo_template_stacks` as well.
 5. **Python 3 venv + Ansible collections** on the machine that runs the playbook (see setup below).
 6. **Do not commit** production inventory, CIDRs, or passwords. `inventories/production/` and `vars/search/*.yml` (except `_example.yml`) are gitignored.
 
@@ -42,8 +42,8 @@ Optional, but fill them if you have them:
 
 | Extra | Why |
 | --- | --- |
-| `palo_serials` | Firewall serials so Panorama can pull live ARP/FIB. If empty, discovery uses `show devices all`. |
-| `palo_template_stacks` | Stack-level network objects. |
+| `palo_serials` in the customer search file | Firewall serials so Panorama can pull live ARP/FIB. If empty, discovery uses `show devices all`. |
+| `palo_template_stacks` in the customer search file | Stack-level network objects. |
 | Enable / become password | Only if IOS/EOS login lands in exec and needs `enable`. Default is `ansible_become: false`. |
 | Several CIDRs | Each block gets its own report folder. |
 
@@ -72,7 +72,9 @@ python3 python/new_search.py \
   --id INC-1042 \
   --site DC1 \
   --customer "Example Retail" \
-  --cidr 10.200.100.0/24
+  --cidr 10.200.100.0/24 \
+  --device-group DG-DC1-PROD \
+  --template TPL-DC1-NETWORK
 # writes vars/search/INC-1042-DC1-Example-Retail.yml
 ```
 
@@ -98,55 +100,69 @@ search_targets:
 customer: Example Retail
 id: INC-1042
 site: DC1
+palo_device_groups:
+  - DG-DC1-PROD
+palo_templates:
+  - TPL-DC1-NETWORK
+palo_template_stacks: []
+palo_serials: []
 ```
 
-Add more CIDRs under `search_targets` if this ticket covers more than one block. Each CIDR is reported separately. Other customers get their own files in `vars/search/`; you pick the file when you run.
+Add more CIDRs under `search_targets` if this ticket covers more than one block. Each CIDR is reported separately. Other customers get their own files in `vars/search/`; you pick the file when you run. Device groups and templates stay in this file so inventory stays shared.
 
 A host such as `10.200.100.10` or a `/30` is valid. `any` and `0.0.0.0/0` are ignored.
 
 ### 4.2 Inventory — `inventories/production/hosts.yml`
 
-Use real management IPs. Hostnames can be the device hostname or any inventory name you will recognise in the report.
+Use real management IPs. Hosts.yml is the estate: OS groups, per-site children, and controllers with hostname + IP only. Connection settings stay in `group_vars/`. Do not put device groups or templates on Panorama.
 
 ```yaml
 all:
   children:
-    switches:
+    network_devices:
       children:
-        cisco:
-          hosts:
-            dc1-acc-01:
-              ansible_host: 10.0.0.11
-              ansible_network_os: cisco.ios.ios
-            dc1-core-01:
-              ansible_host: 10.0.0.12
-              ansible_network_os: cisco.nxos.nxos
-        arista:
-          hosts:
-            DC1-LEAF01:
-              ansible_host: 10.0.0.21
-              ansible_network_os: arista.eos.eos
-            DC1-LEAF02:
-              ansible_host: 10.0.0.22
-              ansible_network_os: arista.eos.eos
-    firewalls:
+        eos_devices:
+          children:
+            eos_dc1:
+              hosts:
+                dc1-leaf-01:
+                  ansible_host: 192.0.2.21
+                  data_center: dc1
+                dc1-aggpe-mls01:
+                  ansible_host: 192.0.2.22
+                  data_center: dc1
+        ios_devices:
+          children:
+            ios_dc1:
+              hosts:
+                dc1-acc-01:
+                  ansible_host: 192.0.2.11
+                  data_center: dc1
+        nxos_devices:
+          children:
+            nxos_dc1:
+              hosts:
+                dc1-core-01:
+                  ansible_host: 192.0.2.12
+                  data_center: dc1
+    dc_dc1:
       children:
-        paloalto:
-          hosts:
-            panorama-01:
-              ansible_host: 10.0.0.30
-              palo_is_panorama: true
-              palo_device_groups:
-                - DG-DC1-PROD
-              palo_templates:
-                - TPL-DC1-NETWORK
-              palo_template_stacks: []
-              palo_serials: []
+        eos_dc1: null
+        ios_dc1: null
+        nxos_dc1: null
+    CVAAS:
+      hosts:
+        cvp:
+          ansible_host: cvp.example.invalid
+    panorama:
+      hosts:
+        panorama-01:
+          ansible_host: 192.0.2.30
 ```
 
-Leave out groups you do not have. A switch-only job can omit `firewalls`. A firewall-only job can omit `switches`.
+`dc_dc1` is an alias so you can `-l dc_dc1`. Leave out OS groups you do not have. CloudVision (`CVAAS`) is listed for inventory completeness; discovery does not log into it.
 
-NX-OS **must** set `ansible_network_os: cisco.nxos.nxos`. IOS can omit it because the `cisco` group defaults to IOS.
+NX-OS hosts must live under `nxos_devices` (that group sets `cisco.nxos.nxos`). IOS lives under `ios_devices`.
 
 ### 4.3 Credentials (environment, not files)
 
@@ -169,15 +185,15 @@ ansible-playbook playbooks/discover.yml \
   -e search_job=INC-1042-DC1-Example-Retail
 ```
 
-`search_job` is the filename in `vars/search/` without `.yml`. That logs into every host in the inventory, then writes reports.
+`search_job` is the filename in `vars/search/` without `.yml`. Collection logs into `network_devices` and `panorama` (not `CVAAS`).
 
-Limit to this customer's devices if the inventory file also holds other sites:
+Limit to one data centre if the inventory holds the whole estate:
 
 ```bash
 ansible-playbook playbooks/discover.yml \
   -i inventories/production/hosts.yml \
   -e search_job=INC-1042-DC1-Example-Retail \
-  -l 'DC1-LEAF01,DC1-LEAF02,dc1-acc-01,dc1-core-01,panorama-01'
+  -l 'dc_dc1,panorama'
 ```
 
 Collection is read-only: no PAN-OS commit, no `state: present`.
@@ -230,9 +246,9 @@ Transit links, MLAG keepalives, and loopbacks **outside** the search CIDR are om
 | Symptom | Check |
 | --- | --- |
 | Playbook cannot SSH | Management IP, VRF of mgmt, username/password, SSH from the control node |
-| NX-OS collected as IOS | Host has `ansible_network_os: cisco.nxos.nxos` |
-| No Palo objects | Panorama IP, API account, `palo_device_groups` names exactly as on Panorama |
-| No Palo interfaces / IKE | `palo_templates` or `palo_template_stacks` |
+| NX-OS collected as IOS | Host is under `nxos_devices`, not `ios_devices` |
+| No Palo objects | Panorama IP, API account, `palo_device_groups` in the **customer search file** match Panorama |
+| No Palo interfaces / IKE | `palo_templates` or `palo_template_stacks` in that same search file |
 | Shared vs DG looks wrong | You listed each device group; child groups are not inherited automatically |
 | No ARP on firewalls | Panorama can reach managed devices; set `palo_serials` if auto-discovery is empty |
 | Empty report | CIDR does not appear on the listed devices, or you pointed `search_job` at the wrong customer file |

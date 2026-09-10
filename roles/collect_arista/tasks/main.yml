@@ -10,7 +10,8 @@
       mgmt_ip: "{{ ansible_host | default(inventory_hostname) }}"
       platform: arista.eos.eos
       vendor: arista
-      role: "{{ 'aggpe' if 'aggpe' in group_names else 'switch' }}"
+      role: "{{ 'aggpe' if ('aggpe' in group_names or 'aggpe' in inventory_hostname) else 'switch' }}"
+      data_center: "{{ data_center | default('') }}"
       vrfs: []
   delegate_to: localhost
 

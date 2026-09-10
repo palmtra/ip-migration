@@ -15,6 +15,10 @@
     file: "{{ search_file }}"
     name: search_data
 
-- name: Expose search CIDRs to the play
+- name: Expose search CIDRs and per-customer Panorama scope
   ansible.builtin.set_fact:
     search_targets: "{{ search_data.search_targets | default([]) }}"
+    palo_device_groups: "{{ search_data.palo_device_groups | default([], true) }}"
+    palo_templates: "{{ search_data.palo_templates | default([], true) }}"
+    palo_template_stacks: "{{ search_data.palo_template_stacks | default([], true) }}"
+    palo_serials: "{{ search_data.palo_serials | default([], true) }}"

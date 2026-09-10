@@ -23,6 +23,34 @@ def main() -> int:
     parser.add_argument("--site", required=True, help="Data centre / site")
     parser.add_argument("--customer", required=True, help="Customer name")
     parser.add_argument("--cidr", action="append", dest="cidrs", required=True, help="Search CIDR (repeatable)")
+    parser.add_argument(
+        "--device-group",
+        action="append",
+        dest="device_groups",
+        default=[],
+        help="Panorama device group (repeatable)",
+    )
+    parser.add_argument(
+        "--template",
+        action="append",
+        dest="templates",
+        default=[],
+        help="Panorama template (repeatable)",
+    )
+    parser.add_argument(
+        "--template-stack",
+        action="append",
+        dest="template_stacks",
+        default=[],
+        help="Panorama template stack (repeatable)",
+    )
+    parser.add_argument(
+        "--serial",
+        action="append",
+        dest="serials",
+        default=[],
+        help="Firewall serial for ARP/FIB via Panorama (repeatable; empty = discover)",
+    )
     parser.add_argument("--dir", type=Path, default=Path(__file__).resolve().parent.parent / "vars" / "search")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
@@ -40,6 +68,10 @@ def main() -> int:
         "customer": args.customer,
         "id": args.id,
         "site": args.site,
+        "palo_device_groups": args.device_groups,
+        "palo_templates": args.templates,
+        "palo_template_stacks": args.template_stacks,
+        "palo_serials": args.serials,
     }
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
     stem = path.stem

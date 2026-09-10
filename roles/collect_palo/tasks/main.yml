@@ -12,6 +12,7 @@
       vendor: paloalto
       role: "{{ 'panorama' if (palo_is_panorama | bool) else 'firewall' }}"
       is_panorama: "{{ palo_is_panorama | bool }}"
+      data_center: "{{ data_center | default('') }}"
       device_groups: "{{ palo_device_groups | default([]) }}"
       templates: "{{ palo_templates | default([]) }}"
       template_stacks: "{{ palo_template_stacks | default([]) }}"
@@ -50,9 +51,9 @@
             or (palo_templates | default([]) | length > 0)
             or (palo_template_stacks | default([]) | length > 0)
         fail_msg: >-
-          Panorama inventory host {{ inventory_hostname }} needs palo_device_groups
-          and palo_templates (and/or palo_template_stacks). Discovery talks to
-          Panorama, not to firewalls directly.
+          Customer search file {{ search_file }} needs palo_device_groups
+          and palo_templates (and/or palo_template_stacks). Those are per-customer
+          vars, not inventory. Discovery talks to Panorama, not to firewalls directly.
 
     - name: Collect Panorama running config
       ansible.builtin.include_tasks: collect_running.yml

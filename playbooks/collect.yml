@@ -1,6 +1,6 @@
 ---
 - name: Collect from Cisco and Arista switches and PEs
-  hosts: switches:aggpe
+  hosts: network_devices
   gather_facts: false
   vars:
     device_artifact_dir: "{{ artifact_root }}/{{ inventory_hostname }}"
@@ -15,12 +15,12 @@
       delegate_to: localhost
   roles:
     - role: collect_cisco
-      when: "'cisco' in group_names"
+      when: "'ios_devices' in group_names or 'nxos_devices' in group_names"
     - role: collect_arista
-      when: "'arista' in group_names"
+      when: "'eos_devices' in group_names"
 
 - name: Collect from Palo Alto Panorama
-  hosts: paloalto
+  hosts: panorama
   gather_facts: false
   vars:
     device_artifact_dir: "{{ artifact_root }}/{{ inventory_hostname }}"

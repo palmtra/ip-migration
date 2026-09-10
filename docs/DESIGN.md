@@ -23,9 +23,10 @@ CIDR overlap, and a cross-device report is done in `python/ip_discovery`.
 
 ## Pipeline
 
-1. Engineer lists devices in inventory and CIDRs in one file per customer
-   (`vars/search/<id>-<site>-<customer>.yml`, selected with `-e search_job=`).
-   Panorama needs device groups and templates on the Panorama host.
+1. Engineer lists devices in inventory (OS groups, per-site children, Panorama/CVP
+   addresses) and CIDRs plus Panorama device groups/templates in one file per
+   customer (`vars/search/<id>-<site>-<customer>.yml`, selected with
+   `-e search_job=`). Connection settings stay in group_vars.
 2. `playbooks/collect.yml` connects read-only and writes `artifacts/<hostname>/`.
    IOS VRF names are discovered on the device. Panorama objects are gathered
    from **shared**, each listed **device group**, and each listed **template**.
@@ -61,7 +62,7 @@ Auth: service account on the Panorama XML API. XML API + operational
 requests, no commit rights. Discovery talks to **Panorama**, not to
 firewalls directly.
 
-Inventory on the Panorama host:
+Customer search file (`vars/search/<id>-<site>-<customer>.yml`):
 
 | Variable | Purpose |
 | --- | --- |

@@ -1,12 +1,9 @@
 ---
 # PAN-OS modules run on the control node and call the XML API on Panorama.
+# Device groups, templates, and serials are per-customer: vars/search/.
 ansible_connection: local
 ansible_python_interpreter: "{{ ansible_playbook_python }}"
 palo_is_panorama: true
-palo_device_groups: []
-palo_templates: []
-palo_template_stacks: []
-palo_serials: []
 provider:
   ip_address: "{{ ansible_host | default(inventory_hostname) }}"
   username: "{{ palo_username }}"

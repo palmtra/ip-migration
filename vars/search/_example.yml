@@ -5,7 +5,8 @@
 #   INC-1042 + DC1 + Example Retail -> INC-1042-DC1-Example-Retail.yml
 #
 # python3 python/new_search.py --id INC-1042 --site DC1 \
-#   --customer "Example Retail" --cidr 192.0.2.0/24
+#   --customer "Example Retail" --cidr 192.0.2.0/24 \
+#   --device-group DG-DC1-PROD --template TPL-DC1-NETWORK
 #
 # ansible-playbook playbooks/discover.yml \
 #   -i inventories/production/hosts.yml \
@@ -15,3 +16,9 @@ search_targets:
 customer: Example Customer
 id: INC-0000
 site: SITE
+palo_device_groups:
+  - DG-SITE-A
+palo_templates:
+  - TPL-NETWORK
+palo_template_stacks: []
+palo_serials: []

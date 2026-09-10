@@ -10,7 +10,8 @@
       mgmt_ip: "{{ ansible_host | default(inventory_hostname) }}"
       platform: "{{ ansible_network_os }}"
       vendor: cisco
-      role: "{{ 'aggpe' if 'aggpe' in group_names else 'switch' }}"
+      role: "{{ 'aggpe' if ('aggpe' in group_names or 'aggpe' in inventory_hostname) else 'switch' }}"
+      data_center: "{{ data_center | default('') }}"
   delegate_to: localhost
 
 - name: Collect Cisco IOS / IOS-XE
