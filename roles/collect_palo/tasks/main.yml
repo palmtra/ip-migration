@@ -1,0 +1,21 @@
+---
+- name: Write device metadata
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/meta.json"
+    mode: "0644"
+    content: "{{ meta | to_nice_json }}"
+  vars:
+    meta:
+      device: "{{ inventory_hostname }}"
+      mgmt_ip: "{{ ansible_host | default(inventory_hostname) }}"
+      platform: paloalto.panos
+      vendor: paloalto
+      vsys: "{{ palo_vsys }}"
+      is_panorama: "{{ palo_is_panorama }}"
+  delegate_to: localhost
+
+- name: Collect PAN-OS configuration objects
+  ansible.builtin.include_tasks: config.yml
+
+- name: Collect PAN-OS operational state
+  ansible.builtin.include_tasks: operational.yml

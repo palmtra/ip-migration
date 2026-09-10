@@ -1,0 +1,17 @@
+---
+- name: Rebuild report from existing artifacts
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Analyze collected artifacts against search targets
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ playbook_dir }}/../python/analyze_hits.py"
+          - --artifacts
+          - "{{ artifact_root }}"
+          - --search
+          - "{{ search_file }}"
+          - --out
+          - "{{ report_root }}"
+      changed_when: true

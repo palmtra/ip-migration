@@ -1,0 +1,34 @@
+---
+- name: Gather NX-OS facts
+  cisco.nxos.nxos_facts:
+    gather_subset:
+      - interfaces
+      - hardware
+
+- name: Run NX-OS discovery commands
+  cisco.nxos.nxos_command:
+    commands:
+      - show ip interface brief vrf all
+      - show ipv6 interface brief vrf all
+      - show ip arp vrf all
+      - show ipv6 neighbor vrf all
+      - show ip route vrf all
+      - show ipv6 route vrf all
+      - show ip access-lists
+      - show ipv6 access-lists
+      - show running-config
+  register: nxos_show
+
+- name: Save NX-OS command output
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/{{ item.file }}"
+    mode: "0644"
+    content: "{{ item.content }}"
+  loop:
+    - file: facts.json
+      content: "{{ ansible_facts | to_nice_json }}"
+    - file: show_commands.json
+      content: "{{ nxos_show | to_nice_json }}"
+  loop_control:
+    label: "{{ item.file }}"
+  delegate_to: localhost

@@ -1,0 +1,46 @@
+---
+- name: Write device metadata
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/meta.json"
+    mode: "0644"
+    content: "{{ meta | to_nice_json }}"
+  vars:
+    meta:
+      device: "{{ inventory_hostname }}"
+      mgmt_ip: "{{ ansible_host | default(inventory_hostname) }}"
+      platform: arista.eos.eos
+      vendor: arista
+  delegate_to: localhost
+
+- name: Gather EOS facts
+  arista.eos.eos_facts:
+    gather_subset:
+      - interfaces
+      - hardware
+
+- name: Run EOS discovery commands as JSON
+  arista.eos.eos_command:
+    commands:
+      - show ip interface brief | json
+      - show ipv6 interface brief | json
+      - show ip arp | json
+      - show ipv6 neighbor | json
+      - show ip route | json
+      - show ipv6 route | json
+      - show ip access-lists | json
+      - show running-config
+  register: eos_show
+
+- name: Save EOS command output
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/{{ item.file }}"
+    mode: "0644"
+    content: "{{ item.content }}"
+  loop:
+    - file: facts.json
+      content: "{{ ansible_facts | to_nice_json }}"
+    - file: show_commands.json
+      content: "{{ eos_show | to_nice_json }}"
+  loop_control:
+    label: "{{ item.file }}"
+  delegate_to: localhost

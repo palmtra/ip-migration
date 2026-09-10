@@ -1,0 +1,14 @@
+---
+collections:
+  - name: cisco.ios
+    version: ">=9.0.0"
+  - name: cisco.nxos
+    version: ">=9.0.0"
+  - name: arista.eos
+    version: ">=10.0.0"
+  - name: paloaltonetworks.panos
+    version: ">=2.21.0"
+  - name: ansible.netcommon
+    version: ">=7.0.0"
+  - name: ansible.utils
+    version: ">=5.0.0"

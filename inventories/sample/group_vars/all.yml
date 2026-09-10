@@ -1,0 +1,12 @@
+---
+artifact_root: "{{ playbook_dir }}/../artifacts"
+search_file: "{{ playbook_dir }}/../vars/search.yml"
+report_root: "{{ playbook_dir }}/../reports"
+
+network_username: "{{ lookup('env', 'NETWORK_USERNAME') }}"
+network_password: "{{ lookup('env', 'NETWORK_PASSWORD') }}"
+palo_username: "{{ lookup('env', 'PALO_USERNAME') }}"
+palo_password: "{{ lookup('env', 'PALO_PASSWORD') }}"
+palo_api_key: "{{ lookup('env', 'PALO_API_KEY') | default('', true) }}"
+palo_port: 443
+palo_validate_certs: false

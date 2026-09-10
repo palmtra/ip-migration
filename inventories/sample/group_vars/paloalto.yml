@@ -1,0 +1,13 @@
+---
+# PAN-OS modules run on the control node and call the XML API.
+ansible_connection: local
+ansible_python_interpreter: "{{ ansible_playbook_python }}"
+palo_vsys: vsys1
+palo_is_panorama: false
+provider:
+  ip_address: "{{ ansible_host | default(inventory_hostname) }}"
+  username: "{{ palo_username }}"
+  password: "{{ palo_password }}"
+  api_key: "{{ palo_api_key | default(omit, true) }}"
+  port: "{{ palo_port }}"
+  serial_number: "{{ palo_serial | default(omit) }}"

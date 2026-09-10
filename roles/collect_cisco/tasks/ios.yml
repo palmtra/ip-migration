@@ -1,0 +1,34 @@
+---
+- name: Gather IOS facts
+  cisco.ios.ios_facts:
+    gather_subset:
+      - interfaces
+      - hardware
+
+- name: Run IOS discovery commands
+  cisco.ios.ios_command:
+    commands:
+      - show ip interface brief
+      - show ipv6 interface brief
+      - show ip arp
+      - show ipv6 neighbors
+      - show ip route
+      - show ipv6 route
+      - show ip access-lists
+      - show ipv6 access-lists
+      - show running-config
+  register: ios_show
+
+- name: Save IOS command output
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/{{ item.file }}"
+    mode: "0644"
+    content: "{{ item.content }}"
+  loop:
+    - file: facts.json
+      content: "{{ ansible_facts | to_nice_json }}"
+    - file: show_commands.json
+      content: "{{ ios_show | to_nice_json }}"
+  loop_control:
+    label: "{{ item.file }}"
+  delegate_to: localhost

@@ -1,0 +1,21 @@
+---
+- name: Write device metadata
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/meta.json"
+    mode: "0644"
+    content: "{{ meta | to_nice_json }}"
+  vars:
+    meta:
+      device: "{{ inventory_hostname }}"
+      mgmt_ip: "{{ ansible_host | default(inventory_hostname) }}"
+      platform: "{{ ansible_network_os }}"
+      vendor: cisco
+  delegate_to: localhost
+
+- name: Collect Cisco IOS / IOS-XE
+  ansible.builtin.include_tasks: ios.yml
+  when: ansible_network_os in ["cisco.ios.ios", "ios"]
+
+- name: Collect Cisco NX-OS
+  ansible.builtin.include_tasks: nxos.yml
+  when: ansible_network_os in ["cisco.nxos.nxos", "nxos"]

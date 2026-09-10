@@ -1,0 +1,91 @@
+---
+- name: Gather address objects
+  paloaltonetworks.panos.panos_address_object:
+    provider: "{{ provider }}"
+    vsys: "{{ palo_vsys }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_addresses
+
+- name: Gather address groups
+  paloaltonetworks.panos.panos_address_group:
+    provider: "{{ provider }}"
+    vsys: "{{ palo_vsys }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_address_groups
+
+- name: Gather security rules
+  paloaltonetworks.panos.panos_security_rule:
+    provider: "{{ provider }}"
+    vsys: "{{ palo_vsys }}"
+    device_group: "{{ palo_device_group | default(omit) }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_security_rules
+
+- name: Gather NAT rules
+  paloaltonetworks.panos.panos_nat_rule2:
+    provider: "{{ provider }}"
+    vsys: "{{ palo_vsys }}"
+    device_group: "{{ palo_device_group | default(omit) }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_nat_rules
+
+- name: Gather IKE gateways
+  paloaltonetworks.panos.panos_ike_gateway:
+    provider: "{{ provider }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_ike_gateways
+  ignore_errors: true
+
+- name: Gather IPSec tunnels
+  paloaltonetworks.panos.panos_ipsec_tunnel:
+    provider: "{{ provider }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_ipsec_tunnels
+  ignore_errors: true
+
+- name: Gather IPSec IPv4 proxy IDs
+  paloaltonetworks.panos.panos_ipsec_ipv4_proxyid:
+    provider: "{{ provider }}"
+    state: gathered
+    gathered_filter: "*"
+  register: palo_ipsec_proxyids
+  ignore_errors: true
+
+- name: Gather GlobalProtect gateway config via xpath
+  paloaltonetworks.panos.panos_op:
+    provider: "{{ provider }}"
+    cmd: show config running
+  register: palo_running_config
+  ignore_errors: true
+
+- name: Save PAN-OS config artifacts
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/{{ item.file }}"
+    mode: "0644"
+    content: "{{ item.content | default({}, true) | to_nice_json }}"
+  loop:
+    - file: addresses.json
+      content: "{{ palo_addresses.gathered | default(palo_addresses, true) }}"
+    - file: address_groups.json
+      content: "{{ palo_address_groups.gathered | default(palo_address_groups, true) }}"
+    - file: security_rules.json
+      content: "{{ palo_security_rules.gathered | default(palo_security_rules, true) }}"
+    - file: nat_rules.json
+      content: "{{ palo_nat_rules.gathered | default(palo_nat_rules, true) }}"
+    - file: ike_gateways.json
+      content: "{{ palo_ike_gateways.gathered | default(palo_ike_gateways, true) }}"
+    - file: ipsec_tunnels.json
+      content: "{{ palo_ipsec_tunnels.gathered | default(palo_ipsec_tunnels, true) }}"
+    - file: ipsec_proxyids.json
+      content: "{{ palo_ipsec_proxyids.gathered | default(palo_ipsec_proxyids, true) }}"
+    - file: running_config.json
+      content: "{{ palo_running_config | default({}, true) }}"
+  loop_control:
+    label: "{{ item.file }}"
+  delegate_to: localhost

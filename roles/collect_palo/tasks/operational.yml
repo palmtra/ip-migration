@@ -1,0 +1,61 @@
+---
+- name: Collect interface operational data
+  paloaltonetworks.panos.panos_op:
+    provider: "{{ provider }}"
+    cmd: show interface all
+  register: palo_interfaces
+
+- name: Collect routing table
+  paloaltonetworks.panos.panos_op:
+    provider: "{{ provider }}"
+    cmd: show routing route
+  register: palo_routes
+
+- name: Collect ARP table
+  paloaltonetworks.panos.panos_op:
+    provider: "{{ provider }}"
+    cmd: show arp all
+  register: palo_arp
+
+- name: Collect GlobalProtect gateway runtime
+  paloaltonetworks.panos.panos_op:
+    provider: "{{ provider }}"
+    cmd: show global-protect-gateway current-user
+  register: palo_gp_users
+  ignore_errors: true
+
+- name: Collect IKE SA state
+  paloaltonetworks.panos.panos_op:
+    provider: "{{ provider }}"
+    cmd: show vpn ike-sa
+  register: palo_ike_sa
+  ignore_errors: true
+
+- name: Collect IPSec SA state
+  paloaltonetworks.panos.panos_op:
+    provider: "{{ provider }}"
+    cmd: show vpn ipsec-sa
+  register: palo_ipsec_sa
+  ignore_errors: true
+
+- name: Save PAN-OS operational artifacts
+  ansible.builtin.copy:
+    dest: "{{ device_artifact_dir }}/{{ item.file }}"
+    mode: "0644"
+    content: "{{ item.content | default({}, true) | to_nice_json }}"
+  loop:
+    - file: op_interfaces.json
+      content: "{{ palo_interfaces | default({}, true) }}"
+    - file: op_routes.json
+      content: "{{ palo_routes | default({}, true) }}"
+    - file: op_arp.json
+      content: "{{ palo_arp | default({}, true) }}"
+    - file: op_gp_users.json
+      content: "{{ palo_gp_users | default({}, true) }}"
+    - file: op_ike_sa.json
+      content: "{{ palo_ike_sa | default({}, true) }}"
+    - file: op_ipsec_sa.json
+      content: "{{ palo_ipsec_sa | default({}, true) }}"
+  loop_control:
+    label: "{{ item.file }}"
+  delegate_to: localhost

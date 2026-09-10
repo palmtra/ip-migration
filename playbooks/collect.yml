@@ -1,0 +1,33 @@
+---
+- name: Collect from Cisco and Arista switches
+  hosts: switches
+  gather_facts: false
+  vars:
+    device_artifact_dir: "{{ artifact_root }}/{{ inventory_hostname }}"
+  pre_tasks:
+    - name: Create per-device artifact directory
+      ansible.builtin.file:
+        path: "{{ device_artifact_dir }}"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+  roles:
+    - role: collect_cisco
+      when: "'cisco' in group_names"
+    - role: collect_arista
+      when: "'arista' in group_names"
+
+- name: Collect from Palo Alto firewalls
+  hosts: paloalto
+  gather_facts: false
+  vars:
+    device_artifact_dir: "{{ artifact_root }}/{{ inventory_hostname }}"
+  pre_tasks:
+    - name: Create per-device artifact directory
+      ansible.builtin.file:
+        path: "{{ device_artifact_dir }}"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+  roles:
+    - collect_palo
