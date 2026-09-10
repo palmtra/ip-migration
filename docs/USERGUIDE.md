@@ -10,7 +10,7 @@ Match rules and collector internals are in [DESIGN.md](DESIGN.md).
 | --- | --- |
 | Customer name, ID, site, IP block, Panorama device groups/templates | One file: `vars/search/<id>-<site>-<customer>.yml` |
 | Each switch/PE hostname + management IP + data centre | `inventories/production/hosts.yml` under `network_devices` |
-| Panorama / CloudVision management address | same inventory, `panorama` and `CVAAS` (hostname + IP only) |
+| Panorama management address | same inventory, `panorama` group (hostname + IP only) |
 | SSH / API connection, `ansible_network_os` | `inventories/production/group_vars/` |
 
 OS values the inventory understands:
@@ -21,7 +21,6 @@ OS values the inventory understands:
 | Cisco NX-OS | `nxos_devices` | `group_vars/nxos_devices.yml` |
 | Arista EOS | `eos_devices` | `group_vars/eos_devices.yml` |
 | Palo Alto (Panorama) | `panorama` | `group_vars/panorama.yml`: API connection only; do **not** SSH firewalls |
-| Arista CloudVision | `CVAAS` | inventory only; discovery does not log into CVP |
 
 Inventory can hold the whole estate. Limit a run with `-l dc_dc1` (or hostnames). Per-customer Panorama scope is selected by `search_job`, not by editing hosts.yml.
 
@@ -150,17 +149,13 @@ all:
         eos_dc1: null
         ios_dc1: null
         nxos_dc1: null
-    CVAAS:
-      hosts:
-        cvp:
-          ansible_host: cvp.example.invalid
     panorama:
       hosts:
         panorama-01:
           ansible_host: 192.0.2.30
 ```
 
-`dc_dc1` is an alias so you can `-l dc_dc1`. Leave out OS groups you do not have. CloudVision (`CVAAS`) is listed for inventory completeness; discovery does not log into it.
+`dc_dc1` is an alias so you can `-l dc_dc1`. Leave out OS groups you do not have.
 
 NX-OS hosts must live under `nxos_devices` (that group sets `cisco.nxos.nxos`). IOS lives under `ios_devices`.
 
@@ -185,7 +180,7 @@ ansible-playbook playbooks/discover.yml \
   -e search_job=INC-1042-DC1-Example-Retail
 ```
 
-`search_job` is the filename in `vars/search/` without `.yml`. Collection logs into `network_devices` and `panorama` (not `CVAAS`).
+`search_job` is the filename in `vars/search/` without `.yml`. Collection logs into `network_devices` and `panorama`.
 
 Limit to one data centre if the inventory holds the whole estate:
 

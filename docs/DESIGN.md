@@ -23,8 +23,8 @@ CIDR overlap, and a cross-device report is done in `python/ip_discovery`.
 
 ## Pipeline
 
-1. Engineer lists devices in inventory (OS groups, per-site children, Panorama/CVP
-   addresses) and CIDRs plus Panorama device groups/templates in one file per
+1. Engineer lists devices in inventory (OS groups, per-site children, Panorama
+   address) and CIDRs plus Panorama device groups/templates in one file per
    customer (`vars/search/<id>-<site>-<customer>.yml`, selected with
    `-e search_job=`). Connection settings stay in group_vars.
 2. `playbooks/collect.yml` connects read-only and writes `artifacts/<hostname>/`.
